@@ -4,13 +4,12 @@ import datetime
 
 
 class Client(models.Model):
-    chat_id = models.CharField(max_length=100, verbose_name='ID чата клиента')
-    nickname = models.CharField(max_length=500, verbose_name='Никнейм клиента')
+    chat_id = models.CharField(max_length=100, verbose_name='ID чата клиента', null=True, blank=True, unique=True)
     name = models.CharField(max_length=40, verbose_name='Имя клиента', null=True, blank=True)
-    tel_number = models.CharField(max_length=12, verbose_name='Номер телефона', null=True, blank=True, unique=True)
+    phonenumber = models.CharField(max_length=12, verbose_name='Номер телефона', null=True, blank=True, unique=True)
 
     def __str__(self):
-        return f'#{self.pk} {self.name} {self.nickname}'
+        return f'#{self.pk} {self.name}'
 
 
 class Salon(models.Model):
