@@ -1,4 +1,5 @@
 from django.db import models
+import datetime
 
 
 class Client(models.Model):
@@ -20,24 +21,35 @@ class Salon(models.Model):
         return f'{self.name}'
 
 
+class Service(models.Model):
+    name = models.CharField(verbose_name='Название услуги',max_length=30)
+    price = models.IntegerField(verbose_name='Цена услуги', blank=True, null=True)
+
+    def __str__(self):
+        return f'{self.name}'
+
+
 class Master(models.Model):
     name = models.CharField(max_length=40, verbose_name='Имя мастера',)
     salons = models.ManyToManyField(Salon)
+    services = models.ManyToManyField(Service)
 
     def __str__(self):
         return f'{self.name}'
 
 
-class Procedure(models.Model):
-    name = models.CharField(verbose_name='Название процедуры',max_length=30)
-    masters = models.ManyToManyField(Master)
 
-    def __str__(self):
-        return f'{self.name}'
         
 
-class Schedule(models.Model):
-    session = models.DateTimeField(verbose_name='Сеанс', null=True, blank=True)
+class Slot(models.Model):
+    start_time = models.DateTimeField(verbose_name='Время начала', null=True, blank=True)
+    duration = models.IntegerField(
+        verbose_name='Длительность',
+        null=True,
+        blank=True,
+        help_text='Длительность в минутах',
+        default=datetime.timedelta(minutes=30),
+    )
     master = models.ForeignKey(Master, on_delete=models.CASCADE)
     salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
 
@@ -48,18 +60,16 @@ class Schedule(models.Model):
 
 class Record(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
-    salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
-    master = models.ForeignKey(Master, on_delete=models.CASCADE)
-    procedure = models.ForeignKey(Procedure, on_delete=models.CASCADE)
-    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE)
+    slot = models.ForeignKey(Slot, on_delete=models.CASCADE, verbose_name='Слот', related_name='records')
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
 
-    class Meta:
-        constraints = (
-            models.UniqueTogetherConstraint(
-                fields=('master', 'schedule'),
-                name='unique_record'
-            ),
-        )
+    # class Meta:
+    #     constraints = (
+    #         models.UniqueTogetherConstraint(
+    #             fields=('master', 'schedule'),
+    #             name='unique_record'
+    #         ),
+    #     )
 
 
 
