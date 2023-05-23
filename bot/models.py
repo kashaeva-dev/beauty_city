@@ -22,7 +22,7 @@ class Procedure(models.Model):
 class Salon(models.Model):
     name = models.CharField(verbose_name='Название салона', max_length=30)
     address = models.TextField(verbose_name='Адрес салона', blank=True, null=True)
-    session = models.DateTimeField(verbose_name='Сеанс', null=True, blank=True)
+
 
     def __str__(self):
         return f'{self.name}'
@@ -36,11 +36,23 @@ class Master(models.Model):
         return f'{self.name}'
 
 
+class Schedule(models.Model):
+    session = models.DateTimeField(verbose_name='Сеанс', null=True, blank=True)
+    master = models.ForeignKey(Master, on_delete=models.CASCADE)
+    salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f'{self.session} {self.master} {self.salon}'
+
+
+
 class Record(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
+    salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
     master = models.ForeignKey(Master, on_delete=models.CASCADE)
     procedure = models.ForeignKey(Procedure, on_delete=models.CASCADE)
     schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE)
+
 
     def __str__(self):
         return f'{self.client} на {self.procedure} к мастеру {self.master}'
