@@ -39,9 +39,6 @@ class Specialist(models.Model):
         return f'{self.name}'
 
 
-
-        
-
 class Slot(models.Model):
     start_time = models.DateTimeField(verbose_name='Время начала', null=True, blank=True)
     duration = models.IntegerField(
