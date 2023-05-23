@@ -53,6 +53,15 @@ class Record(models.Model):
     procedure = models.ForeignKey(Procedure, on_delete=models.CASCADE)
     schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE)
 
+    class Meta:
+        constraints = (
+            models.UniqueTogetherConstraint(
+                fields=('master', 'schedule'),
+                name='unique_record'
+            ),
+        )
+
+
 
     def __str__(self):
         return f'{self.client} на {self.procedure} к мастеру {self.master}'
