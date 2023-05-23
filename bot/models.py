@@ -11,14 +11,6 @@ class Client(models.Model):
         return f'#{self.pk} {self.name} {self.nickname}'
 
 
-class Procedure(models.Model):
-    name = models.CharField(verbose_name='Название процедуры',max_length=30)
-    masters = models.ManyToManyField(Master)
-
-    def __str__(self):
-        return f'{self.name}'
-
-
 class Salon(models.Model):
     name = models.CharField(verbose_name='Название салона', max_length=30)
     address = models.TextField(verbose_name='Адрес салона', blank=True, null=True)
@@ -35,6 +27,14 @@ class Master(models.Model):
     def __str__(self):
         return f'{self.name}'
 
+
+class Procedure(models.Model):
+    name = models.CharField(verbose_name='Название процедуры',max_length=30)
+    masters = models.ManyToManyField(Master)
+
+    def __str__(self):
+        return f'{self.name}'
+        
 
 class Schedule(models.Model):
     session = models.DateTimeField(verbose_name='Сеанс', null=True, blank=True)
