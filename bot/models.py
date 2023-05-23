@@ -8,6 +8,10 @@ class Client(models.Model):
     name = models.CharField(max_length=40, verbose_name='Имя клиента', null=True, blank=True)
     phonenumber = models.CharField(max_length=12, verbose_name='Номер телефона', null=True, blank=True, unique=True)
 
+    class Meta:
+        verbose_name = 'Клиент'
+        verbose_name_plural = 'Клиенты'
+
     def __str__(self):
         return f'#{self.pk} {self.name}'
 
@@ -16,17 +20,24 @@ class Salon(models.Model):
     name = models.CharField(verbose_name='Название салона', max_length=30)
     address = models.TextField(verbose_name='Адрес салона', blank=True, null=True)
 
+    class Meta:
+        verbose_name = 'Салон'
+        verbose_name_plural = 'Салоны'
 
     def __str__(self):
-        return f'{self.name}'
+        return self.name
 
 
 class Service(models.Model):
     name = models.CharField(verbose_name='Название услуги',max_length=30)
     price = models.IntegerField(verbose_name='Цена услуги', blank=True, null=True)
 
+    class Meta:
+        verbose_name = 'Услуга'
+        verbose_name_plural = 'Услуги'
+
     def __str__(self):
-        return f'{self.name}'
+        return self.name
 
 
 class Specialist(models.Model):
@@ -35,27 +46,68 @@ class Specialist(models.Model):
     salons = models.ManyToManyField(Salon)
     services = models.ManyToManyField(Service)
 
+    class Meta:
+        verbose_name = 'Мастер'
+        verbose_name_plural = 'Мастера'
+
     def __str__(self):
-        return f'{self.name}'
+        return f'{self.name} {self.surname}'
 
 
 class Slot(models.Model):
-    start_time = models.DateTimeField(verbose_name='Время начала', null=True, blank=True)
-    duration = models.IntegerField(
-        verbose_name='Длительность',
-        null=True,
-        blank=True,
-        help_text='Длительность в минутах',
-        default=datetime.timedelta(minutes=30),
+    START_TIME_CHOICES = [
+        ('09:00', '09:00'),
+        ('09:30', '09:30'),
+        ('10:00', '10:00'),
+        ('10:30', '10:30'),
+        ('11:00', '11:00'),
+        ('11:30', '11:30'),
+        ('12:00', '12:00'),
+        ('12:30', '12:30'),
+        ('13:00', '13:00'),
+        ('13:30', '13:30'),
+        ('14:00', '14:00'),
+        ('14:30', '14:30'),
+        ('15:00', '15:00'),
+        ('15:30', '15:30'),
+        ('16:00', '16:00'),
+        ('16:30', '16:30'),
+        ('17:00', '17:00'),
+        ('17:30', '17:30'),
+        ('18:00', '18:00'),
+        ('18:30', '18:30'),
+        ('19:00', '19:00'),
+        ('19:30', '19:30'),
+        ('20:00', '20:00'),
+        ('20:30', '20:30'),
+    ]
+    start_date = models.DateField(verbose_name='Дата начала')
+    start_time = models.TimeField(verbose_name='Время начала', blank=True)
+    start_time_choice = models.CharField(
+        verbose_name='Время начала',
+        choices=START_TIME_CHOICES,
+        max_length=5,
     )
     specialist = models.ForeignKey(Specialist, on_delete=models.CASCADE)
     salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
 
+    class Meta:
+        verbose_name = 'Слот'
+        verbose_name_plural = 'Слоты'
+        constraints = [models.UniqueConstraint(fields=['start_date', 'start_time', 'specialist'], name='unique_slot',
+                                               violation_error_message="Данное время уже существует")
+                       ]
+
     def __str__(self):
         return f'{self.start_time} {self.specialist} {self.salon}'
 
-
-
+    def save(self, *args, **kwargs):
+        if self.start_time_choice:
+            self.start_time = datetime.time(
+                hour=int(self.start_time_choice[:2]),
+                minute=int(self.start_time_choice[3:])
+            )
+        super().save(*args, **kwargs)
 
 
 class Appointment(models.Model):
