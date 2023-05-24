@@ -7,6 +7,7 @@ from .models import (
     Specialist,
     Slot,
     Appointment,
+    Payment,
 )
 
 admin.site.register(Client)
@@ -14,6 +15,7 @@ admin.site.register(Service)
 admin.site.register(Salon)
 admin.site.register(Specialist)
 admin.site.register(Slot)
+admin.site.register(Payment)
 
 
 @admin.register(Appointment)

@@ -112,6 +112,7 @@ class Command(BaseCommand):
             context.bot.answer_pre_checkout_query(query.id, ok=True)
 
         def success_payment(update, context):
+
             update.message.reply_text(f'Спасибо за оплату!{update.message.successful_payment.invoice_payload} {context.user_data["ap_id"]}')
 
         def echo(update, context):

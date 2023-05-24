@@ -137,8 +137,8 @@ class Payment(models.Model):
     appointment = models.OneToOneField(
         Appointment,
         on_delete=models.CASCADE,
-        verbose_name='Оплата',
-        related_name='payment',
+        verbose_name='Запись',
+        related_name='appointment',
         )
 
     class Meta:
