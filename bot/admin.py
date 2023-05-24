@@ -8,6 +8,7 @@ from .models import (
     Slot,
     Appointment,
     Payment,
+    Reviews,
 )
 
 admin.site.register(Client)
