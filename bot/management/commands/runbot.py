@@ -24,7 +24,9 @@ from conf import settings
 from bot.models import (
     Client,
     Slot,
-    Salon
+    Salon,
+    Specialist,
+    Service
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
@@ -98,8 +100,14 @@ class Command(BaseCommand):
 
         def faq(update, _):
             query = update.callback_query
-
-            keyboard = [
+            services = Service.objects.all()
+            keyboard = []
+            for  service in services:
+                full_name = f'{service.name} - {service.price} руб.'
+                keyboard.append([InlineKeyboardButton(full_name,
+                                callback_data=service.id)])
+            
+            buttons = [
                 [
                     InlineKeyboardButton("Услуги", callback_data='FAQ_services'),
                     InlineKeyboardButton("Режим работы", callback_data='FAQ_working_hours'),
@@ -113,6 +121,10 @@ class Command(BaseCommand):
                     InlineKeyboardButton("На главный", callback_data="to_start"),
                 ],
             ]
+
+            for button in buttons:
+                keyboard.append(button)
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.answer()
             if query.data == 'to_FAQ':
@@ -135,7 +147,7 @@ class Command(BaseCommand):
             keyboard = [
                 [
                     InlineKeyboardButton("Выбрать услугу", callback_data='FAQ_services'),
-                    InlineKeyboardButton("Выбрать специалиста", callback_data='FAQ_working_hours'),
+                    InlineKeyboardButton("Выбрать специалиста", callback_data='to_сhoose_service'),
                 ],
                 [
                     InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
@@ -149,7 +161,6 @@ class Command(BaseCommand):
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.answer()
             salon = Salon.objects.first()
-            print(salon.address)
             if query.data == 'to_order':
                 query.edit_message_text(
                     text=salon.address,
@@ -159,6 +170,50 @@ class Command(BaseCommand):
             else:
                 query.edit_message_text(
                     text=FAQ_ANSWERS[query.data],
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            return 'SHOW_INFO'
+
+        def сhoose_service(update, _):
+            '''Выбор специалиста'''
+            query = update.callback_query
+            specialists = Specialist.objects.all()
+            keyboard = []
+            for  specialist in specialists:
+                full_name = f'{specialist.name} {specialist.surname}'
+                keyboard.append([InlineKeyboardButton(full_name,
+                                callback_data=specialist.id)])
+            
+            buttons =[
+                [
+                    InlineKeyboardButton("Услуги", callback_data='FAQ_services'),
+                    InlineKeyboardButton("Режим работы", callback_data='FAQ_working_hours'),
+                ],
+                [
+                    InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
+                    InlineKeyboardButton("Телефон", callback_data="FAQ_phone"),
+                ],
+                [
+                    InlineKeyboardButton("Портфолио", callback_data='FAQ_portfolio'),
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ]
+            ]
+            for button in buttons:
+                keyboard.append(button)
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.answer()
+            
+            if query.data == 'сhoose_service':
+                query.edit_message_text(
+                    text = 'Специалист',# {specialist.name} {specialist.surname}",
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            else:
+                query.edit_message_text(
+                    text= 'Специалист',#FAQ_ANSWERS[query.data],
                     reply_markup=reply_markup,
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
@@ -362,13 +417,25 @@ class Command(BaseCommand):
                     CallbackQueryHandler(faq, pattern='to_FAQ'),
                     CallbackQueryHandler(order, pattern='to_order'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    # CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
                     # CallbackQueryHandler(get_delivery, pattern='to_delivery'),
                     # CallbackQueryHandler(get_expired, pattern='to_expired'),
                 ],
                 'SHOW_INFO': [
+                    CallbackQueryHandler(order, pattern='to_order'),
+                    CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
                     CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
+                 'SHOW_SERVICES': [
+                    CallbackQueryHandler(order, pattern='to_order'),
+                    CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
+                    CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                ],
+
+
+                
                 # 'SHOW_AD': [
                 #     CallbackQueryHandler(show_stat, pattern='to_stat'),
                 #     CallbackQueryHandler(start_conversation, pattern='to_start'),
