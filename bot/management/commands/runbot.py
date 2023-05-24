@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import telegram
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from pytz import timezone
@@ -54,13 +55,13 @@ class Command(BaseCommand):
 
             keyboard_new = [
                 [
-                    InlineKeyboardButton("О нас", callback_data='about'),
+                    InlineKeyboardButton("О нас", callback_data='to_FAQ'),
                     InlineKeyboardButton("Записаться", callback_data="to_order"),
                 ],
             ]
             keyboard_old = [
                     [
-                        InlineKeyboardButton("О нас", callback_data='about'),
+                        InlineKeyboardButton("О нас", callback_data='to_FAQ'),
                         InlineKeyboardButton("Отставить отзыв", callback_data="to_review")
                     ],
                     [
@@ -93,6 +94,39 @@ class Command(BaseCommand):
 
             return 'MAIN_MENU'
 
+
+        def faq(update, _):
+            query = update.callback_query
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("Услуги", callback_data='FAQ_services'),
+                    InlineKeyboardButton("Режим работы", callback_data='FAQ_working_hours'),
+                ],
+                [
+                    InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
+                    InlineKeyboardButton("Телефон", callback_data="FAQ_phone"),
+                ],
+                [
+                    InlineKeyboardButton("Портфолио", callback_data='FAQ_portfolio'),
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.answer()
+            if query.data == 'to_FAQ':
+                query.edit_message_text(
+                    text="Выберите интересующий вопрос:",
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            else:
+                query.edit_message_text(
+                    text=FAQ_ANSWERS[query.data],
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            return 'SHOW_INFO'
         # def get_delivery(update, _):
         #     query = update.callback_query
         #     deliveries = Delivery.objects.filter(
@@ -287,10 +321,14 @@ class Command(BaseCommand):
             entry_points=[CommandHandler('start', start_conversation)],
             states={
                 'MAIN_MENU': [
-                    # CallbackQueryHandler(show_ad, pattern='to_ad'),
+                    CallbackQueryHandler(faq, pattern='to_FAQ'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     # CallbackQueryHandler(get_delivery, pattern='to_delivery'),
                     # CallbackQueryHandler(get_expired, pattern='to_expired'),
+                ],
+                'SHOW_INFO': [
+                    CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
                 # 'SHOW_AD': [
                 #     CallbackQueryHandler(show_stat, pattern='to_stat'),

@@ -127,7 +127,7 @@ class Appointment(models.Model):
         verbose_name_plural = 'Записи'
 
     def __str__(self):
-        return f'{self.client.name} к мастеру {self.slot.specialist.name} {self.slot.specialist.surname} ({self.service.name})'
+        return f'{self.client.name} к мастеру {self.slot.specialist.name} {self.slot.specialist.surname} ({self.service.name}, {self.slot.start_date} {self.slot.start_time}'
 
 
 class Payment(models.Model):
