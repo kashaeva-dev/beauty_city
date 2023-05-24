@@ -99,7 +99,9 @@ class Slot(models.Model):
                        ]
 
     def __str__(self):
-        return f'{self.start_time} {self.specialist} {self.salon}'
+        formatted_date = self.start_date.strftime('%d.%m.%Y')
+        formatted_time = self.start_time.strftime('%H:%M')
+        return f'{formatted_date} {formatted_time} {self.specialist}'
 
     def save(self, *args, **kwargs):
         if self.start_time_choice:
@@ -113,14 +115,19 @@ class Slot(models.Model):
 class Appointment(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name='Клиент', related_name='appointments')
     slot = models.OneToOneField(Slot, on_delete=models.CASCADE, verbose_name='Слот', related_name='appointment')
-    service = models.ForeignKey(Service, on_delete=models.CASCADE, verbose_name='Услуга', related_name='appointments')
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.CASCADE,
+        verbose_name='Услуга',
+        related_name='appointments',
+    )
 
     class Meta:
         verbose_name = 'Запись'
         verbose_name_plural = 'Записи'
 
     def __str__(self):
-        return f'{self.client.name} на {self.service.name} к мастеру {self.slot.specialist.name}{self.slot.specialist.surname}'
+        return f'{self.client.name} к мастеру {self.slot.specialist.name} {self.slot.specialist.surname} ({self.service.name})'
 
 
 class Payment(models.Model):
