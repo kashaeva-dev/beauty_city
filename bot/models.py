@@ -172,11 +172,22 @@ class Promocode(models.Model):
         super().save(*args, **kwargs)
 
 
+class Reviews(models.Model):
+    MARK_CHOICES = (
+        (1, '1'),
+        (2, '2'),
+        (3, '3'),
+        (4, '4'),
+        (5, '5'),
+    )
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, verbose_name='Запись', related_name='reviews')
+    mark = models.IntegerField(choices=MARK_CHOICES)
+    text = models.TextField(verbose_name='Текст отзыва', blank=True, null=True)
+    answer = models.TextField(verbose_name='Ответ', blank=True, null=True)
 
-    # class Meta:
-    #     constraints = (
-    #         models.UniqueTogetherConstraint(
-    #             fields=('master', 'schedule'),
-    #             name='unique_record'
-    #         ),
-    #     )
+    class Meta:
+        verbose_name = 'Отзыв'
+        verbose_name_plural = 'Отзывы'
+
+    def __str__(self):
+        return f'{self.appointment.client.name} - {self.mark}'

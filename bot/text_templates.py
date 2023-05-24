@@ -5,9 +5,9 @@ from prettytable import PrettyTable
 def get_services():
     services = Service.objects.all()
     table = PrettyTable()
-    table.field_names = ['*', 'Услуга', 'Цена, руб.']
+    table.field_names = ['Услуга', 'Цена, руб.']
     for service in services:
-        table.add_row([service.id, service.name, service.price])
+        table.add_row([service.name, service.price])
     table.align = 'l'
     return table
 

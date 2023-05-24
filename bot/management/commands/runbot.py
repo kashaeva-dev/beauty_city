@@ -69,7 +69,7 @@ class Command(BaseCommand):
                     ],
             ]
 
-            if client:
+            if client is not None:
                 if query:
                     query.edit_message_text(
                         text="Выберите интересующий вопрос:",
