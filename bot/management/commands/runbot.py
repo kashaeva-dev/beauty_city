@@ -23,7 +23,8 @@ from conf import settings
 
 from bot.models import (
     Client,
-    Slot
+    Slot,
+    Salon
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
@@ -147,10 +148,11 @@ class Command(BaseCommand):
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.answer()
+            salon = Salon.objects.first()
+            print(salon.address)
             if query.data == 'to_order':
                 query.edit_message_text(
-                    #TODO сделать запрос, чтобы адресс тянулся из бд
-                    text="BeautyCity м. Давыдково, ул. Инициативная, д. 9",
+                    text=salon.address,
                     reply_markup=reply_markup,
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
