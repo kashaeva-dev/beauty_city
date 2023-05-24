@@ -23,8 +23,7 @@ from conf import settings
 
 from bot.models import (
     Client,
-    Slot,
-    Salon
+    Slot
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
@@ -132,7 +131,6 @@ class Command(BaseCommand):
         def order(update, _):
             '''Функция создает ордер на услугу'''
             query = update.callback_query
-            salon = Salon.objects.first()
             keyboard = [
                 [
                     InlineKeyboardButton("Выбрать услугу", callback_data='FAQ_services'),
@@ -152,8 +150,7 @@ class Command(BaseCommand):
             if query.data == 'to_order':
                 query.edit_message_text(
                     #TODO сделать запрос, чтобы адресс тянулся из бд
-                    text = salon.address
-                    #text="BeautyCity м. Давыдково, ул. Инициативная, д. 9",
+                    text="BeautyCity м. Давыдково, ул. Инициативная, д. 9",
                     reply_markup=reply_markup,
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
