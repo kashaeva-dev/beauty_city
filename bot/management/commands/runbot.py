@@ -127,6 +127,42 @@ class Command(BaseCommand):
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
             return 'SHOW_INFO'
+
+        def order(update, _):
+            '''Функция создает ордер на услугу'''
+            query = update.callback_query
+            keyboard = [
+                [
+                    InlineKeyboardButton("Выбрать услугу", callback_data='FAQ_services'),
+                    InlineKeyboardButton("Выбрать специалиста", callback_data='FAQ_working_hours'),
+                ],
+                [
+                    InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
+                    InlineKeyboardButton("Телефон", callback_data="FAQ_phone"),
+                ],
+                [
+                    InlineKeyboardButton("Портфолио", callback_data='FAQ_portfolio'),
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.answer()
+            if query.data == 'to_order':
+                query.edit_message_text(
+                    #TODO сделать запрос, чтобы адресс тянулся из бд
+                    text="BeautyCity м. Давыдково, ул. Инициативная, д. 9",
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            else:
+                query.edit_message_text(
+                    text=FAQ_ANSWERS[query.data],
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+            return 'SHOW_INFO'
+
+
         # def get_delivery(update, _):
         #     query = update.callback_query
         #     deliveries = Delivery.objects.filter(
@@ -322,6 +358,7 @@ class Command(BaseCommand):
             states={
                 'MAIN_MENU': [
                     CallbackQueryHandler(faq, pattern='to_FAQ'),
+                    CallbackQueryHandler(order, pattern='to_order'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     # CallbackQueryHandler(get_delivery, pattern='to_delivery'),
                     # CallbackQueryHandler(get_expired, pattern='to_expired'),
