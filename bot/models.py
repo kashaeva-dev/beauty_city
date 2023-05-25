@@ -139,6 +139,7 @@ class Payment(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Запись',
         related_name='appointment',
+        related_query_name='payment',
         )
 
     class Meta:
@@ -172,7 +173,7 @@ class Promocode(models.Model):
         super().save(*args, **kwargs)
 
 
-class Reviews(models.Model):
+class Review(models.Model):
     MARK_CHOICES = (
         (1, '1'),
         (2, '2'),
