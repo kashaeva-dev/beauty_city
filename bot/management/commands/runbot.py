@@ -188,7 +188,6 @@ class Command(BaseCommand):
             if query.data.startswith('mark_'):
                 mark = query.data.split('_')[-1]
                 context.user_data['mark'] = mark
-                context.user_data['appointment_id'] = context.user_data['appointment_id']
                 keyboard = [
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -233,41 +232,65 @@ class Command(BaseCommand):
             return 'MAIN_MENU'
 
 
-        def order(update, _):
+        def make_appointment(update, _):
             '''Функция создает ордер на услугу'''
             query = update.callback_query
             keyboard = [
                 [
-                    InlineKeyboardButton("Выбрать услугу", callback_data='FAQ_services'),
-                    InlineKeyboardButton("Выбрать специалиста", callback_data='to_сhoose_service'),
+                    InlineKeyboardButton("Выбрать услугу", callback_data='get_service'),
+                    InlineKeyboardButton("Выбрать специалиста", callback_data='сhoose_specialist'),
                 ],
                 [
-                    InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
-                    InlineKeyboardButton("Телефон", callback_data="FAQ_phone"),
-                ],
-                [
-                    InlineKeyboardButton("Портфолио", callback_data='FAQ_portfolio'),
+                    InlineKeyboardButton("Позвонить", callback_data="show_phone"),
                     InlineKeyboardButton("На главный", callback_data="to_start"),
                 ],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            query.answer()
-            salon = Salon.objects.first()
+
             if query.data == 'to_order':
                 query.edit_message_text(
-                    text=salon.address,
+                    text="Пожалуйста, выберите, что Вас интересует:",
                     reply_markup=reply_markup,
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
-            else:
-                query.edit_message_text(
-                    text=FAQ_ANSWERS[query.data],
-                    reply_markup=reply_markup,
-                    parse_mode=telegram.ParseMode.MARKDOWN,
-                )
-            return 'SHOW_INFO'
 
-        def сhoose_service(update, _):
+            if query.data == 'show_phone':
+                query.edit_message_text(
+                    text=f"{FAQ_ANSWERS['FAQ_phone']}",
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+
+            query.answer()
+
+            return 'MAKE_APPOINTMENT'
+
+        def get_service(update, _):
+
+            '''Функция отвечает за вывод списка услуг для выбора пользователя>'''
+
+            query = update.callback_query
+            logger.info(f'get service query data {query.data}')
+            services = Service.objects.all()
+            keyboard = []
+            for service in services:
+                mask = f"{service.name} ({service.price} руб.)"
+                keyboard.append([InlineKeyboardButton(mask, callback_data=f'service_{service.id}')])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+            if query.data == 'get_service':
+                query.edit_message_text(
+                    text="Пожалуйста, выберите, что Вас интересует:",
+                    reply_markup=reply_markup,
+                    parse_mode=telegram.ParseMode.MARKDOWN,
+                )
+
+            query.answer()
+
+            return 'SERVICES'
+
+        def сhoose_specialist(update, _):
             '''Выбор специалиста'''
             query = update.callback_query
             specialists = Specialist.objects.all()
@@ -326,18 +349,11 @@ class Command(BaseCommand):
             states={
                 'MAIN_MENU': [
                     CallbackQueryHandler(faq, pattern='to_FAQ'),
-                    CallbackQueryHandler(order, pattern='to_order'),
+                    CallbackQueryHandler(make_appointment, pattern='to_order'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     CallbackQueryHandler(review, pattern='to_review'),
-                    CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
                 ],
                 'ABOUT': [
-                    CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
-                    CallbackQueryHandler(start_conversation, pattern='to_start'),
-                ],
-                'SHOW_INFO': [
-                    CallbackQueryHandler(order, pattern='to_order'),
-                    CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
                     CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
@@ -354,12 +370,16 @@ class Command(BaseCommand):
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, get_review_text),
                 ],
-                'SHOW_SERVICES': [
-                    CallbackQueryHandler(order, pattern='to_order'),
-                    CallbackQueryHandler(сhoose_service, pattern='to_сhoose_service'),
-                    CallbackQueryHandler(faq, pattern='(FAQ_.*)'),
+                'MAKE_APPOINTMENT': [
+                    CallbackQueryHandler(make_appointment, pattern='to_order'),
+                    CallbackQueryHandler(get_service, pattern='get_service'),
+                    CallbackQueryHandler(make_appointment, pattern='show_phone'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
+                'SERVICES': [
+                    CallbackQueryHandler(get_service, pattern='get_service'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
