@@ -297,13 +297,23 @@ class Command(BaseCommand):
         def get_date(update, context):
             query = update.callback_query
             if query.data.startswith('service_'):
+                context.user_data['type'] = 'by_service'
                 service_id = query.data.split('_')[-1]
-                service = Service.objects.get(pk=service_id)
-                logger.info(f'услуга {service_id}')
+                services = [Service.objects.get(pk=service_id)]
                 specialists = Specialist.objects.filter(services__id=service_id)
-                logger.info(f'услуга {specialists}')
+                context.user_data['specialists'] = specialists
                 context.user_data['service_id'] = service_id
-                context.user_data['service'] = service
+                context.user_data['services'] = services
+            if query.data.startswith('specialist_'):
+                context.user_data['type'] = 'by_specialist'
+                specialist_id = query.data.split('_')[-1]
+                specialists = [Specialist.objects.get(pk=specialist_id)]
+                logger.info(f'специалист {specialist_id}')
+                context.user_data['specialist_id'] = specialist_id
+                context.user_data['specialists'] = specialists
+                services = specialists[0].services.all()
+                context.user_data['services'] = services
+            if query.data.startswith('specialist_') or query.data.startswith('service_'):
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
@@ -576,7 +586,7 @@ class Command(BaseCommand):
                 for specialist in specialists:
                     full_name = f'{specialist.name} {specialist.surname}'
                     keyboard.append([InlineKeyboardButton(full_name,
-                                    callback_data=f'to_specialist_{specialist.pk}')])
+                                    callback_data=f'specialist_{specialist.pk}')])
             
                 keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
@@ -673,6 +683,7 @@ class Command(BaseCommand):
                 ],
                 'SPECIALISTS': [
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    CallbackQueryHandler(get_date, pattern='(specialist_.*)'),
                 ],
                 # 'PROCESS_PRE_CHECKOUT': [
                 #     PreCheckoutQueryHandler(process_pre_checkout_query),
