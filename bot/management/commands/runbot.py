@@ -241,7 +241,7 @@ class Command(BaseCommand):
             keyboard = [
                 [
                     InlineKeyboardButton("Выбрать услугу", callback_data='get_service'),
-                    InlineKeyboardButton("Выбрать специалиста", callback_data='сhoose_specialist'),
+                    InlineKeyboardButton("Выбрать специалиста", callback_data='get_specialist'),
                 ],
                 [
                     InlineKeyboardButton("Позвонить", callback_data="show_phone"),
@@ -567,33 +567,28 @@ class Command(BaseCommand):
         def apply_promocode(update, context):
             pass
 
-        def сhoose_specialist(update, _):
+        def get_specialist(update, _):
             '''Выбор специалиста'''
             query = update.callback_query
-            specialists = Specialist.objects.all()
-            keyboard = []
-            for  specialist in specialists:
-                full_name = f'{specialist.name} {specialist.surname}'
-                keyboard.append([InlineKeyboardButton(full_name,
-                                callback_data='to_specialist')])
+            if query.data == 'get_specialist':
+                specialists = Specialist.objects.all()
+                keyboard = []
+                for specialist in specialists:
+                    full_name = f'{specialist.name} {specialist.surname}'
+                    keyboard.append([InlineKeyboardButton(full_name,
+                                    callback_data=f'to_specialist_{specialist.pk}')])
             
-            keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+                keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.answer()
-            
-            if query.data == 'сhoose_service':
-                query.edit_message_text(
-                    text = 'Специалист',# {specialist.name} {specialist.surname}",
-                    reply_markup=reply_markup,
-                    parse_mode=telegram.ParseMode.MARKDOWN,
-                )
-            else:
-                query.edit_message_text(
-                    text= 'Специалист',#FAQ_ANSWERS[query.data],
-                    reply_markup=reply_markup,
-                    parse_mode=telegram.ParseMode.MARKDOWN,
-                )
+
+            query.edit_message_text(
+                text=f'Пожалуйста, выберите нужного Вам специалиста:',
+                reply_markup=reply_markup,
+                parse_mode=telegram.ParseMode.MARKDOWN,
+            )
+
             return 'SPECIALISTS'
 
 
@@ -641,6 +636,7 @@ class Command(BaseCommand):
                     CallbackQueryHandler(get_service, pattern='get_service'),
                     CallbackQueryHandler(make_appointment, pattern='show_phone'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    CallbackQueryHandler(get_specialist, pattern='get_specialist'),
                 ],
                 'SERVICES': [
                     CallbackQueryHandler(get_date, pattern='(service_.*)'),
@@ -672,17 +668,16 @@ class Command(BaseCommand):
                     CallbackQueryHandler(buy, pattern='to_buy'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
-                    PreCheckoutQueryHandler(process_pre_checkout_query),
-                    CallbackQueryHandler(success_payment, pattern='success_payment'),
+                    # PreCheckoutQueryHandler(process_pre_checkout_query),
+                    # CallbackQueryHandler(success_payment, pattern='success_payment'),
                 ],
                 'SPECIALISTS': [
-                    CallbackQueryHandler(сhoose_specialist, pattern='to_сhoose_specialist'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
-                'PROCESS_PRE_CHECKOUT': [
-                    PreCheckoutQueryHandler(process_pre_checkout_query),
-                    CallbackQueryHandler(success_payment, pattern='success_payment'),
-                ]
+                # 'PROCESS_PRE_CHECKOUT': [
+                #     PreCheckoutQueryHandler(process_pre_checkout_query),
+                #     CallbackQueryHandler(success_payment, pattern='success_payment'),
+                # ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
