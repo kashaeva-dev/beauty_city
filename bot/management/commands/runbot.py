@@ -8,7 +8,9 @@ from pytz import timezone
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove, ParseMode,
+    ReplyKeyboardRemove,
+    ParseMode,
+    LabeledPrice,
 )
 from telegram.ext import (
     Updater,
@@ -97,12 +99,12 @@ class Command(BaseCommand):
                 logger.info('client is None')
                 if query:
                     query.edit_message_text(
-                        text="Выберите интересующий вопрос:",
+                        text="Выберите интересующий Вас вопрос:",
                         reply_markup=InlineKeyboardMarkup(keyboard_new),
                     )
                 else:
                     update.message.reply_text(
-                        text="Выберите интресующий вас вопрос:",
+                        text="Выберите интресующий Вас вопрос:",
                         reply_markup=InlineKeyboardMarkup(keyboard_new),
                     )
 
@@ -290,6 +292,247 @@ class Command(BaseCommand):
 
             return 'SERVICES'
 
+
+        def get_date(update, context):
+            query = update.callback_query
+            if query.data.startswith('service_'):
+                service_id = query.data.split('_')[-1]
+                logger.info(f'услуга {service_id}')
+                specialists = Specialist.objects.filter(services__id=service_id)
+                logger.info(f'услуга {specialists}')
+                context.user_data['service_id'] = service_id
+                now = datetime.datetime.now()
+                today = now.date()
+                current_time = now.time()
+                slots = Slot.objects.filter(
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                )
+                available_dates = slots.values_list('start_date', flat=True).distinct().order_by('start_date')
+                logger.info(f'слоты {slots}')
+                min_date = available_dates.first()
+                max_date = available_dates.last()
+                min_date_weekday = min_date.weekday()
+                max_date_weekday = max_date.weekday()
+                delta_to_monday = datetime.timedelta(days=min_date_weekday)
+                delta_to_sunday = datetime.timedelta(days=6 - max_date_weekday)
+                start_date = min_date - delta_to_monday
+                end_date = max_date + delta_to_sunday
+                dates = []
+                while start_date <= end_date:
+                    dates.append(start_date)
+                    start_date += datetime.timedelta(days=1)
+                dates_keyboard = []
+                for date in dates:
+                    if date in available_dates:
+                        date_text = f'{date.strftime("%d.%m")}'
+                        dates_keyboard.append(
+                            InlineKeyboardButton(date_text, callback_data=f'date_{date.strftime("%Y-%m-%d")}'))
+                    else:
+                        dates_keyboard.append(InlineKeyboardButton(' ', callback_data='null'))
+                dates_keyboard = [dates_keyboard[i:i + 7] for i in range(0, len(dates_keyboard), 7)]
+                keyboard = [
+                               [InlineKeyboardButton(" Пн. ", callback_data='null'),
+                                InlineKeyboardButton(" Вт. ", callback_data='null'),
+                                InlineKeyboardButton(" Ср. ", callback_data='null'),
+                                InlineKeyboardButton(" Чт. ", callback_data='null'),
+                                InlineKeyboardButton(" Пт. ", callback_data='null'),
+                                InlineKeyboardButton(" Сб. ", callback_data='null'),
+                                InlineKeyboardButton(" Вс. ", callback_data='null'),
+                                ]
+                           ] + dates_keyboard
+                keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text(
+                    text="Пожалуйста, выберите удобную Вам дату:",
+                    reply_markup=reply_markup,
+                )
+
+            query.answer()
+
+            return 'GET_DATE'
+
+        def get_time(update, context):
+            query = update.callback_query
+            if query.data.startswith('date_'):
+                date = query.data.split('_')[-1]
+                context.user_data['date'] = date
+                logger.info(f'get time - date - {date}')
+                now = datetime.datetime.now()
+                today = now.date()
+                current_time = now.time()
+                service_id = context.user_data['service_id']
+                specialists = Specialist.objects.filter(services__id=service_id)
+                slots = Slot.objects.filter(
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                )
+                times = slots.filter(
+                    start_date=date,
+                ).values_list('start_time', flat=True).distinct().order_by('start_time')
+                times_keyboard = []
+                for time in times:
+                    times_keyboard.append(InlineKeyboardButton(
+                        time.strftime('%H:%M'),
+                        callback_data=f'time_{time.strftime("%H:%M")}',
+                    ))
+                times_keyboard = [times_keyboard[i:i + 5] for i in range(0, len(times_keyboard), 5)]
+                return_keyboard = [
+                    [InlineKeyboardButton("На главный", callback_data="to_start")],
+                    [InlineKeyboardButton("Выбрать дату", callback_data=f'service_{service_id}')],
+                ]
+                keyboard = times_keyboard + return_keyboard
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text(
+                    text="Пожалуйста, выберите удобное Вам время:",
+                    reply_markup=reply_markup,
+                )
+
+            query.answer()
+
+            return 'GET_TIME'
+
+        def get_specialist_after_time(update, context):
+            query = update.callback_query
+            if query.data.startswith('time_'):
+                time = query.data.split('_')[-1]
+                context.user_data['time'] = time
+                logger.info(f'get specialist after time - {time}')
+                now = datetime.datetime.now()
+                today = now.date()
+                current_time = now.time()
+                service_id = context.user_data['service_id']
+                specialists = Specialist.objects.filter(services__id=service_id)
+                date = context.user_data['date']
+                slots = Slot.objects.filter(
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                )
+                available_specialists = slots.filter(
+                    start_date=date,
+                    start_time=time,
+                ).values_list('specialist', flat=True).distinct()
+                keyboard = []
+                logger.info(f'specialists - {available_specialists}')
+                for specialist in available_specialists:
+                    logger.info(f'specialist - {specialist}')
+                    logger.info(f'specialists - {specialists}')
+                    specialist = specialists.get(pk=specialist)
+                    logger.info(specialist.name)
+                    keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}', callback_data=f'specialist_after_{specialist.id}')])
+                # keyboard.append([InlineKeyboardButton("Любой", callback_data="specialist_after_any")])
+                keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text(
+                    text="Пожалуйста, выберите специалиста:",
+                    reply_markup=reply_markup,
+                )
+
+            query.answer()
+
+            return 'GET_CLIENT_PHONE'
+
+
+        def get_client_phone(update, context):
+            query = update.callback_query
+            if query.data.startswith('specialist_after_'):
+                specialist_id = query.data.split('_')[-1]
+                context.user_data['specialist_id'] = specialist_id
+                specialist = Specialist.objects.get(pk=specialist_id)
+                service_id = context.user_data['service_id']
+                service = Service.objects.get(pk=service_id)
+                date = context.user_data['date']
+                time = context.user_data['time']
+                slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time, specialist=specialist).first()
+                if slot:
+                    context.user_data['slot_id'] = slot.id
+                    logger.info(f'get client phone - specialist_id - {specialist_id}')
+                    text = f'Вы хотите записаться на услугу <b>{service.name}</b>' \
+                       f' на <b>{date}</b> в <b>{time}</b> к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n'\
+                       f'Продолжая, Вы даете свое согласие на обработку персональных данных.\n\n' \
+                    f'Пожалуйста, введите Ваш номер телефона <b>в ответном сообщении</b>.'
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("Позвонить", callback_data="show_phone"),
+                            InlineKeyboardButton("На главный", callback_data="to_start")
+                        ],
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    query.edit_message_text(
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML,
+                    )
+                else:
+                    query.edit_message_text(
+                        text="Извините, время уже занято. Пожалуйста, выберите другое время",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Выбрать время", callback_data=f'date_{date}')]])
+                    )
+                    return 'GET_TIME'
+
+            query.answer()
+
+            return 'GET_CLIENT_NAME'
+
+
+        def get_client_name(update, context):
+            phone = update.message.text
+            context.user_data['phone'] = phone
+            keyboard = [
+                [
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(
+                text='✅ Введите Ваше имя в ответном сообщении:',
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.HTML,
+            )
+            return 'CREATE_APPOINTMENT_RECORD'
+
+
+        def create_appointment_record(update, context):
+            chat_id = update.message.chat_id
+            name = update.message.chat.first_name
+            service_id = context.user_data['service_id']
+            service = Service.objects.get(pk=service_id)
+            date = context.user_data['date']
+            time = context.user_data['time']
+            logger.info(f'get client name - {name}')
+            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date}</b> в <b>{time}</b>.\n\n' \
+                   f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n'\
+            f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
+                   f'Вы можете оплатить сейчас или наличными в салоне.\n\n'\
+            f'Спасибо за запись!'
+            prices = [LabeledPrice(label=f'{service.name}', amount=service.price * 100)]
+
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(
+                text=text, reply_markup=reply_markup,
+                parse_mode=ParseMode.HTML,
+            )
+            update.message.send_invoice(
+                chat_id=update.effective_chat.id,
+                title='Оплата услуг салона красоты',
+                payload='some-invoice-payload-for-our-internal-use',
+                description='Оплата за стрижку у Татьяны 27.05.2023',
+                provider_token=settings.yoo_kassa_provider_token,
+                currency='RUB',
+                prices=prices,
+            )
+
+
+            return 'CREATE_APPOINTMENT_RECORD'
+
         def сhoose_specialist(update, _):
             '''Выбор специалиста'''
             query = update.callback_query
@@ -377,9 +620,35 @@ class Command(BaseCommand):
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
                 'SERVICES': [
+                    CallbackQueryHandler(get_date, pattern='(service_.*)'),
                     CallbackQueryHandler(get_service, pattern='get_service'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
-                ]
+                ],
+                'GET_DATE': [
+                    CallbackQueryHandler(get_time, pattern='(date_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                ],
+                'GET_TIME': [
+                    CallbackQueryHandler(get_date, pattern='(service_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    CallbackQueryHandler(get_specialist_after_time, pattern='(time_.*)'),
+                ],
+                'GET_SPECIALIST_AFTER_TIME': [
+                    CallbackQueryHandler(get_client_phone, pattern='(specialist_after_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                ],
+                'GET_CLIENT_PHONE': [
+                    CallbackQueryHandler(get_client_phone, pattern='(specialist_after_.*)'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                ],
+                'GET_CLIENT_NAME': [
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    MessageHandler(Filters.text, get_client_name),
+                ],
+                'CREATE_APPOINTMENT_RECORD': [
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    MessageHandler(Filters.text, create_appointment_record),
+                ],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
