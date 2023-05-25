@@ -19,6 +19,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ConversationHandler,
+    PreCheckoutQueryHandler,
 )
 
 from conf import settings
@@ -297,10 +298,12 @@ class Command(BaseCommand):
             query = update.callback_query
             if query.data.startswith('service_'):
                 service_id = query.data.split('_')[-1]
+                service = Service.objects.get(pk=service_id)
                 logger.info(f'услуга {service_id}')
                 specialists = Specialist.objects.filter(services__id=service_id)
                 logger.info(f'услуга {specialists}')
                 context.user_data['service_id'] = service_id
+                context.user_data['service'] = service
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
@@ -402,7 +405,7 @@ class Command(BaseCommand):
                 today = now.date()
                 current_time = now.time()
                 service_id = context.user_data['service_id']
-                specialists = Specialist.objects.filter(services__id=service_id)
+                specialists = Specialist.objects.filter(services__pk=service_id)
                 date = context.user_data['date']
                 slots = Slot.objects.filter(
                     Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
@@ -441,8 +444,8 @@ class Command(BaseCommand):
                 specialist_id = query.data.split('_')[-1]
                 context.user_data['specialist_id'] = specialist_id
                 specialist = Specialist.objects.get(pk=specialist_id)
-                service_id = context.user_data['service_id']
-                service = Service.objects.get(pk=service_id)
+                context.user_data['specialist'] = specialist
+                service = context.user_data['service']
                 date = context.user_data['date']
                 time = context.user_data['time']
                 slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time, specialist=specialist).first()
@@ -497,41 +500,70 @@ class Command(BaseCommand):
         def create_appointment_record(update, context):
             chat_id = update.message.chat_id
             name = update.message.chat.first_name
-            service_id = context.user_data['service_id']
-            service = Service.objects.get(pk=service_id)
+            service = context.user_data['service']
+            specialist = context.user_data['specialist']
             date = context.user_data['date']
             time = context.user_data['time']
             logger.info(f'get client name - {name}')
-            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date}</b> в <b>{time}</b>.\n\n' \
+            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date}</b> в <b>{time}</b> ' \
+                   f'к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
                    f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n'\
             f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
                    f'Вы можете оплатить сейчас или наличными в салоне.\n\n'\
             f'Спасибо за запись!'
-            prices = [LabeledPrice(label=f'{service.name}', amount=service.price * 100)]
-
 
             keyboard = [
                 [
+                    InlineKeyboardButton("Оплатить", callback_data="to_buy"),
+                    InlineKeyboardButton("Промокод", callback_data="to_apply_promocode"),
                     InlineKeyboardButton("На главный", callback_data="to_start"),
                 ],
             ]
+
             reply_markup = InlineKeyboardMarkup(keyboard)
             update.message.reply_text(
                 text=text, reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML,
             )
-            update.message.send_invoice(
-                chat_id=update.effective_chat.id,
-                title='Оплата услуг салона красоты',
-                payload='some-invoice-payload-for-our-internal-use',
-                description='Оплата за стрижку у Татьяны 27.05.2023',
-                provider_token=settings.yoo_kassa_provider_token,
-                currency='RUB',
-                prices=prices,
-            )
-
 
             return 'CREATE_APPOINTMENT_RECORD'
+
+
+        def buy(update, context):
+            query = update.callback_query
+            if query.data == 'to_buy':
+                service = context.user_data['service']
+                specialist = context.user_data['specialist']
+                date = context.user_data['date']
+                time = context.user_data['time']
+                prices = [LabeledPrice(label=f'{service.name}', amount=service.price * 100)]
+
+                context.bot.send_invoice(
+                    chat_id=update.effective_chat.id,
+                    title='Оплата услуг салона красоты',
+                    payload='some-invoice-payload-for-our-internal-use',
+                    description='Оплата за стрижку у Татьяны 27.05.2023',
+                    provider_token=settings.yoo_kassa_provider_token,
+                    currency='RUB',
+                    prices=prices,
+                )
+            query.answer()
+
+            return 'PROCESS_PRE_CHECKOUT'
+
+        def process_pre_checkout_query(update, context):
+            query = update.pre_checkout_query
+            # Отправка подтверждения о готовности к выполнению платежа
+            context.bot.answer_pre_checkout_query(query.id, ok=True)
+
+
+        def success_payment(update, context):
+
+            update.message.reply_text(f'Спасибо за оплату!{update.message.successful_payment.invoice_payload} {context.user_data["service"].price}')
+            return ConversationHandler.END
+
+        def apply_promocode(update, context):
+            pass
 
         def сhoose_specialist(update, _):
             '''Выбор специалиста'''
@@ -587,6 +619,10 @@ class Command(BaseCommand):
             )
             return ConversationHandler.END
 
+        pre_checkout_handler = PreCheckoutQueryHandler(process_pre_checkout_query)
+        success_payment_handler = MessageHandler(Filters.successful_payment, success_payment)
+        dispatcher.add_handler(pre_checkout_handler)
+        dispatcher.add_handler(success_payment_handler)
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start_conversation)],
             states={
@@ -646,9 +682,16 @@ class Command(BaseCommand):
                     MessageHandler(Filters.text, get_client_name),
                 ],
                 'CREATE_APPOINTMENT_RECORD': [
+                    CallbackQueryHandler(buy, pattern='to_buy'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
+                    PreCheckoutQueryHandler(process_pre_checkout_query),
+                    CallbackQueryHandler(success_payment, pattern='success_payment'),
                 ],
+                'PROCESS_PRE_CHECKOUT': [
+                    PreCheckoutQueryHandler(process_pre_checkout_query),
+                    CallbackQueryHandler(success_payment, pattern='success_payment'),
+                ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
