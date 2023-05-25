@@ -440,6 +440,8 @@ class Command(BaseCommand):
 
         def get_client_phone(update, context):
             query = update.callback_query
+
+            logger.info(f'get client phone - query - {update}')
             if query.data.startswith('specialist_after_'):
                 specialist_id = query.data.split('_')[-1]
                 context.user_data['specialist_id'] = specialist_id
