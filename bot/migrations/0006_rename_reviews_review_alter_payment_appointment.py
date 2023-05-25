@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('bot', '0005_reviews_my'),
+        ('bot', '0005_reviews'),
     ]
 
     operations = [
