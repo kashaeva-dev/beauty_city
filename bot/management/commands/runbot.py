@@ -541,24 +541,9 @@ class Command(BaseCommand):
             for  specialist in specialists:
                 full_name = f'{specialist.name} {specialist.surname}'
                 keyboard.append([InlineKeyboardButton(full_name,
-                                callback_data=specialist.id)])
+                                callback_data='to_specialist')])
             
-            buttons =[
-                [
-                    InlineKeyboardButton("Услуги", callback_data='FAQ_services'),
-                    InlineKeyboardButton("Режим работы", callback_data='FAQ_working_hours'),
-                ],
-                [
-                    InlineKeyboardButton("Адрес", callback_data='FAQ_address'),
-                    InlineKeyboardButton("Телефон", callback_data="FAQ_phone"),
-                ],
-                [
-                    InlineKeyboardButton("Портфолио", callback_data='FAQ_portfolio'),
-                    InlineKeyboardButton("На главный", callback_data="to_start"),
-                ]
-            ]
-            for button in buttons:
-                keyboard.append(button)
+            keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.answer()
@@ -575,7 +560,7 @@ class Command(BaseCommand):
                     reply_markup=reply_markup,
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
-            return 'SHOW_INFO'
+            return 'SPECIALISTS'
 
 
         def cancel(update, _):
@@ -648,6 +633,10 @@ class Command(BaseCommand):
                 'CREATE_APPOINTMENT_RECORD': [
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
+                ],
+                'SPECIALISTS': [
+                    CallbackQueryHandler(сhoose_specialist, pattern='to_сhoose_specialist'),
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
