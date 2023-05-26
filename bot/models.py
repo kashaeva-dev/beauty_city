@@ -133,7 +133,7 @@ class Appointment(models.Model):
 class Payment(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name='Клиент', related_name='payments')
     amount = models.IntegerField(verbose_name='Сумма платежа', blank=True, null=True)
-    date = models.DateTimeField(verbose_name='Дата платежа', null=True, blank=True)
+    date = models.DateTimeField(verbose_name='Дата платежа', auto_now_add=True)
     appointment = models.OneToOneField(
         Appointment,
         on_delete=models.CASCADE,

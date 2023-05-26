@@ -31,7 +31,7 @@ from bot.models import (
     Review,
     Salon,
     Specialist,
-    Service,
+    Service, Payment,
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
@@ -56,13 +56,12 @@ class Command(BaseCommand):
 
         def start_conversation(update, context):
             query = update.callback_query
-            client = Client.objects.filter(chat_id=update.effective_chat.id).first()
+            clients = Client.objects.filter(chat_id=update.effective_chat.id)
             no_review_appointments = Appointment.objects.filter(
-                client=client,
+                client__in=clients,
                 reviews__isnull=True,
-                payment__isnull=False,
             )
-            logger.info(f'client with effective chat_id {client}')
+            logger.info(f'client with effective chat_id {clients}')
             logger.info(f'no_review_appointments {no_review_appointments}')
             if query:
                 query.answer()
@@ -151,7 +150,9 @@ class Command(BaseCommand):
                 keyboard = []
                 for appointment in no_review_appointments:
                     logger.info(f'appointment {appointment}')
-                    mask = f"{appointment.service.name} {appointment.slot.start_date.strftime('%d.%m')} {appointment.slot.start_time.strftime('%H.%M')}, мастер: {appointment.slot.specialist.name}"
+                    mask = f"{appointment.service.name} {appointment.slot.start_date.strftime('%d.%m')}" \
+                           f" в {appointment.slot.start_time.strftime('%H.%M')}," \
+                           f" мастер: {appointment.slot.specialist.name}"
                     keyboard.append([InlineKeyboardButton(mask, callback_data=f'review_{appointment.id}')])
                 keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -171,11 +172,11 @@ class Command(BaseCommand):
                 context.user_data['appointment_id'] = appointment_id
                 keyboard = [
                     [
-                        InlineKeyboardButton("'1'", callback_data="mark_1"),
-                        InlineKeyboardButton("'2'", callback_data="mark_2"),
-                        InlineKeyboardButton("'3'", callback_data="mark_3"),
-                        InlineKeyboardButton("'4'", callback_data="mark_4"),
-                        InlineKeyboardButton("'5'", callback_data="mark_5"),
+                        InlineKeyboardButton("1 ⭐️", callback_data="mark_1"),
+                        InlineKeyboardButton("2 ⭐️", callback_data="mark_2"),
+                        InlineKeyboardButton("3 ⭐️", callback_data="mark_3"),
+                        InlineKeyboardButton("4 ⭐️", callback_data="mark_4"),
+                        InlineKeyboardButton("5 ⭐️", callback_data="mark_5"),
                     ],
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -185,6 +186,8 @@ class Command(BaseCommand):
                 query.edit_message_text(
                     text="Пожалуйста, оцените Ваше посещение:",
                     reply_markup=reply_markup,
+                    parse_mode="HTML",
+
                 )
             if query.data.startswith('mark_'):
                 mark = query.data.split('_')[-1]
@@ -374,6 +377,7 @@ class Command(BaseCommand):
             query = update.callback_query
             if query.data.startswith('date_'):
                 date = query.data.split('_')[-1]
+                date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
                 context.user_data['date'] = date
                 logger.info(f'get time - date - {date}')
                 now = datetime.datetime.now()
@@ -494,12 +498,15 @@ class Command(BaseCommand):
                 slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time,
                                            specialist=specialist).first()
                 if slot:
+                    context.user_data['slot'] = slot
                     context.user_data['slot_id'] = slot.id
                     logger.info(f'get client phone - specialist_id - {specialist}')
-                    text = f'Вы хотите записаться на услугу <b>{service.name}</b>' \
-                           f' на <b>{date}</b> в <b>{time}</b> к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
-                           f'Продолжая, Вы даете свое согласие на обработку персональных данных.\n\n' \
-                           f'Пожалуйста, введите Ваш номер телефона <b>в ответном сообщении</b>.'
+                    text = f'Вы хотите записаться на услугу *{service.name}*' \
+                           f' на *{date.strftime("%d.%m.%Y")}* в *{time}* к мастеру *{specialist.name} {specialist.surname}.*\n\n' \
+                           f'Продолжая, Вы даете свое [согласие на обработку персональных данных]' \
+                           f'(https://docs.google.com/document/' \
+                           f'd/1U-ZZa9bosHbqEbVwvgubUdR6T9gC33igDmEUMYVREQw/edit?usp=sharing).\n\n' \
+                           f'📞 Пожалуйста, введите Ваш номер телефона *в ответном сообщении*.'
                     keyboard = [
                         [
                             InlineKeyboardButton("Позвонить", callback_data="show_phone"),
@@ -510,7 +517,7 @@ class Command(BaseCommand):
                     query.edit_message_text(
                         text=text,
                         reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML,
+                        parse_mode=ParseMode.MARKDOWN,
                     )
                 else:
                     query.edit_message_text(
@@ -541,19 +548,43 @@ class Command(BaseCommand):
             return 'CREATE_APPOINTMENT_RECORD'
 
         def create_appointment_record(update, context):
+            logger.info(f'start to create appointment record - {context.user_data}')
             chat_id = update.message.chat_id
-            name = update.message.chat.first_name
+            name = update.message.text
             service = context.user_data['service']
+            slot = context.user_data['slot']
             specialist = context.user_data['specialist']
             date = context.user_data['date']
             time = context.user_data['time']
+
+            try:
+                client, created = Client.objects.get_or_create(
+                    chat_id=chat_id,
+                    name=name,
+                    phonenumber=context.user_data['phone'],
+                )
+                logger.info(f'trying to create appointment - client - {client} {created}')
+                context.user_data['client'] = client
+                appointment = Appointment.objects.create(
+                    client=client,
+                    slot=slot,
+                    service=service,
+                )
+                context.user_data['appointment'] = appointment
+            except:
+                update.message.reply_text(
+                    text='Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.',
+                    parse_mode=ParseMode.HTML,
+                )
+                return ConversationHandler.END
+
             logger.info(f'get client name - {name}')
-            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date}</b> в <b>{time}</b> ' \
+            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date.strftime("%d.%m.%Y")}</b> в <b>{time}</b> ' \
                    f'к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
                    f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n' \
                    f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
                    f'Вы можете оплатить сейчас или наличными в салоне.\n\n' \
-                   f'Спасибо за запись!'
+                   f'Номер Вашей записи <b>{appointment.pk}</b>. Спасибо за запись!'
 
             keyboard = [
                 [
@@ -579,12 +610,13 @@ class Command(BaseCommand):
                 date = context.user_data['date']
                 time = context.user_data['time']
                 prices = [LabeledPrice(label=f'{service.name}', amount=service.price * 100)]
-
+                description = f'Оплата за услугу {service.name} (мастер: {specialist.name} {specialist.surname},' \
+                              f' время: {date.strftime("%d.%m.%Y")} {time})'
                 context.bot.send_invoice(
                     chat_id=update.effective_chat.id,
                     title='Оплата услуг салона красоты',
-                    payload='some-invoice-payload-for-our-internal-use',
-                    description='Оплата за стрижку у Татьяны 27.05.2023',
+                    payload=context.user_data['appointment'].pk,
+                    description=description,
                     provider_token=settings.yoo_kassa_provider_token,
                     currency='RUB',
                     prices=prices,
@@ -595,28 +627,52 @@ class Command(BaseCommand):
 
         def process_pre_checkout_query(update, context):
             query = update.pre_checkout_query
+            try:
+                appointment = Appointment.objects.filter(pk=query.invoice_payload, payment__isnull=True).first()
+            except:
+                context.bot.answer_pre_checkout_query(
+                    pre_checkout_query_id=query.id,
+                    ok=False,
+                    error_message="Что-то пошло не так...",
+                )
+                return
             # Отправка подтверждения о готовности к выполнению платежа
             context.bot.answer_pre_checkout_query(query.id, ok=True)
 
 
         def success_payment(update, context):
-            text = f'✅ Спасибо за оплату!{update.message.successful_payment.invoice_payload} {context.user_data["service"].price}'
-            keyboard = [
-                [
-                    InlineKeyboardButton("На главный", callback_data="to_start"),
-                ],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML,
-            )
+            '''Обработка успешной оплаты'''
+            try:
+                Payment.objects.create(
+                    client = context.user_data['client'],
+                    appointment=context.user_data['appointment'],
+                    amount=update.message.successful_payment.total_amount / 100,
+                )
+            except:
+                logger.error(f'Ошибка при записи информации о платеже в бд'
+                             f' {update.message.successful_payment.invoice_payload}')
+            finally:
+                text = f'✅ Спасибо за оплату {update.message.successful_payment.total_amount}/100 руб.!\n\n'
+                keyboard = [
+                    [
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                update.message.reply_text(
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                )
 
             return 'SUCCESS_PAYMENT'
 
         def apply_promocode(update, context):
-            pass
+            query = update.callback_query
+            if query.data == 'to_apply_promocode':
+                pass
+
+            return 'PROMOCODE'
 
         def get_specialist(update, _):
             '''Выбор специалиста'''
@@ -727,6 +783,7 @@ class Command(BaseCommand):
                 ],
                 'CREATE_APPOINTMENT_RECORD': [
                     CallbackQueryHandler(buy, pattern='to_buy'),
+                    CallbackQueryHandler(buy, pattern='to_apply_promocode'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
                     # PreCheckoutQueryHandler(process_pre_checkout_query),
