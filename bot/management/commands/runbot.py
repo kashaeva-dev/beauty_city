@@ -519,6 +519,7 @@ class Command(BaseCommand):
                         text=text,
                         reply_markup=reply_markup,
                         parse_mode=ParseMode.MARKDOWN,
+                        disable_web_page_preview=True,
                     )
                 else:
                     query.edit_message_text(
@@ -557,6 +558,7 @@ class Command(BaseCommand):
                 )
                 return 'CREATE_APPOINTMENT_RECORD'
             else:
+                logger.info({update.message.contact})
                 keyboard = [
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -564,7 +566,7 @@ class Command(BaseCommand):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 context.bot.send_message(chat_id=update.effective_chat.id,
-                                         text='Введите корректный номер',
+                                         text='❌ Пожалуйста, введите корректный номер телефона:',
                                          reply_markup=reply_markup,
                                          )
 
@@ -613,7 +615,7 @@ class Command(BaseCommand):
             keyboard = [
                 [
                     InlineKeyboardButton("Оплатить", callback_data="to_buy"),
-                    InlineKeyboardButton("Промокод", callback_data="to_apply_promocode"),
+                    InlineKeyboardButton("Промокод", callback_data="get_promocode"),
                     InlineKeyboardButton("На главный", callback_data="to_start"),
                 ],
             ]
@@ -691,7 +693,7 @@ class Command(BaseCommand):
 
             return 'SUCCESS_PAYMENT'
 
-        def apply_promocode(update, context):
+        def get_promocode(update, context):
             query = update.callback_query
             if query.data == 'to_apply_promocode':
                 pass

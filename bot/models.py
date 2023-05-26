@@ -112,6 +112,29 @@ class Slot(models.Model):
         super().save(*args, **kwargs)
 
 
+class Promocode(models.Model):
+    name = models.CharField(max_length=30, verbose_name='Промокод')
+    description = models.TextField(verbose_name='Описание', blank=True, null=True)
+    start_date = models.DateTimeField(verbose_name='Дата начала', null=True, blank=True)
+    end_date = models.DateTimeField(verbose_name='Дата окончания', null=True, blank=True)
+    discount = models.IntegerField(verbose_name='Скидка, %', blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Промокод'
+        verbose_name_plural = 'Промокоды'
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        if self.start_date and self.end_date and self.end_date <= self.start_date:
+            raise ValidationError('Дата окончания должна быть больше даты начала')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+
 class Appointment(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name='Клиент', related_name='appointments')
     slot = models.OneToOneField(Slot, on_delete=models.CASCADE, verbose_name='Слот', related_name='appointment')
@@ -120,6 +143,14 @@ class Appointment(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Услуга',
         related_name='appointments',
+    )
+    promocode = models.ForeignKey(
+        Promocode,
+        on_delete=models.PROTECT,
+        verbose_name='Промокод',
+        related_name='appointments',
+        blank=True,
+        null=True,
     )
 
     class Meta:
@@ -148,29 +179,6 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.date}: {self.amount} - {self.client}'
-
-
-class Promocode(models.Model):
-    name = models.CharField(max_length=30, verbose_name='Промокод')
-    description = models.TextField(verbose_name='Описание', blank=True, null=True)
-    start_date = models.DateTimeField(verbose_name='Дата начала', null=True, blank=True)
-    end_date = models.DateTimeField(verbose_name='Дата окончания', null=True, blank=True)
-    discount = models.IntegerField(verbose_name='Скидка, %', blank=True, null=True)
-
-    class Meta:
-        verbose_name = 'Промокод'
-        verbose_name_plural = 'Промокоды'
-
-    def __str__(self):
-        return self.name
-
-    def clean(self):
-        if self.start_date and self.end_date and self.end_date <= self.start_date:
-            raise ValidationError('Дата окончания должна быть больше даты начала')
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
 
 
 class Review(models.Model):

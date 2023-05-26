@@ -9,6 +9,7 @@ from .models import (
     Appointment,
     Payment,
     Review,
+    Promocode,
 )
 
 admin.site.register(Client)
@@ -18,6 +19,7 @@ admin.site.register(Specialist)
 admin.site.register(Slot)
 admin.site.register(Payment)
 admin.site.register(Review)
+admin.site.register(Promocode)
 
 
 @admin.register(Appointment)
