@@ -3,6 +3,7 @@ import logging
 
 import phonenumbers
 import telegram
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from pytz import timezone
@@ -32,7 +33,7 @@ from bot.models import (
     Review,
     Salon,
     Specialist,
-    Service, Payment,
+    Service, Payment, Promocode,
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
@@ -40,7 +41,7 @@ from bot.text_templates import (
 
 # Ведение журнала логов
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s', level=logging.INFO,
 )
 
 logger = logging.getLogger(__name__)
@@ -598,6 +599,7 @@ class Command(BaseCommand):
                 )
                 context.user_data['appointment'] = appointment
             except:
+                logger.info(f'error while creating appointment record', exc_info=True)
                 update.message.reply_text(
                     text='Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.',
                     parse_mode=ParseMode.HTML,
@@ -631,11 +633,18 @@ class Command(BaseCommand):
         def buy(update, context):
             query = update.callback_query
             if query.data == 'to_buy':
+                discount_price = context.user_data.get('discount_price', False)
                 service = context.user_data['service']
                 specialist = context.user_data['specialist']
                 date = context.user_data['date']
                 time = context.user_data['time']
-                prices = [LabeledPrice(label=f'{service.name}', amount=service.price * 100)]
+                price = 0
+                if discount_price:
+                    logger.info(f'buy - discount price - {discount_price}')
+                    price = int(discount_price)
+                else:
+                    price = int(service.price)
+                prices = [LabeledPrice(label=f'{service.name}', amount=price * 100)]
                 description = f'Оплата за услугу {service.name} (мастер: {specialist.name} {specialist.surname},' \
                               f' время: {date.strftime("%d.%m.%Y")} {time})'
                 context.bot.send_invoice(
@@ -678,7 +687,7 @@ class Command(BaseCommand):
                 logger.error(f'Ошибка при записи информации о платеже в бд'
                              f' {update.message.successful_payment.invoice_payload}')
             finally:
-                text = f'✅ Спасибо за оплату {update.message.successful_payment.total_amount}/100 руб.!\n\n'
+                text = f'✅ Спасибо за оплату {update.message.successful_payment.total_amount / 100} руб.!\n\n'
                 keyboard = [
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -693,12 +702,68 @@ class Command(BaseCommand):
 
             return 'SUCCESS_PAYMENT'
 
+
         def get_promocode(update, context):
             query = update.callback_query
-            if query.data == 'to_apply_promocode':
-                pass
+            if query.data == 'get_promocode':
+                keyboard = [
+                    [
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                query.edit_message_text(
+                    text='✅ Введите промокод в ответном сообщении:',
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                )
+                return 'CHECK_PROMOCODE'
 
-            return 'PROMOCODE'
+
+        def check_promocode(update, context):
+            promocode = update.message.text
+            try:
+                promocode = Promocode.objects.get(name=promocode)
+            except Promocode.DoesNotExist:
+                keyboard = [
+                    [
+                        InlineKeyboardButton("Оплатить без промокода", callback_data="to_buy"),
+                        InlineKeyboardButton("Промокод", callback_data="get_promocode"),
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                context.bot.send_message(chat_id=update.effective_chat.id,
+                                         text='❌ Введенный промокод не найден!',
+                                         reply_markup=reply_markup,
+                                         )
+
+                return 'CHECK_PROMOCODE'
+            else:
+                service = context.user_data['service']
+                discount_price = service.price - (service.price * promocode.discount / 100)
+                logger.info(f'check_promocode - discount price - {discount_price}')
+                context.user_data['discount_price'] = discount_price
+                text = f'✅ Ваш промокод <b>{promocode.name}</b> применен!\n\n' \
+                       f'Стоимость услуги с учетом <b>{promocode.discount}%</b>' \
+                       f' скидки составляет <b>{discount_price}</b> руб.'
+                appointment = context.user_data['appointment']
+                appointment.promocode = promocode
+                appointment.save()
+                keyboard = [
+                        [
+                            InlineKeyboardButton("Оплатить", callback_data="to_buy"),
+                            InlineKeyboardButton("На главный", callback_data="to_start"),
+                        ],
+                    ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                update.message.reply_text(
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                )
+                return 'APPLY_PROMOCODE'
+
 
         def get_specialist(update, _):
             '''Выбор специалиста'''
@@ -809,7 +874,7 @@ class Command(BaseCommand):
                 ],
                 'CREATE_APPOINTMENT_RECORD': [
                     CallbackQueryHandler(buy, pattern='to_buy'),
-                    CallbackQueryHandler(buy, pattern='to_apply_promocode'),
+                    CallbackQueryHandler(get_promocode, pattern='get_promocode'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
                     # PreCheckoutQueryHandler(process_pre_checkout_query),
@@ -818,6 +883,16 @@ class Command(BaseCommand):
                 'SPECIALISTS': [
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     CallbackQueryHandler(get_date, pattern='(specialist_.*)'),
+                ],
+                'CHECK_PROMOCODE': [
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    CallbackQueryHandler(buy, pattern='to_buy'),
+                    CallbackQueryHandler(get_promocode, pattern='get_promocode'),
+                    MessageHandler(Filters.text, check_promocode),
+                ],
+                'APPLY_PROMOCODE': [
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
+                    CallbackQueryHandler(buy, pattern='to_buy'),
                 ],
                 'PROCESS_PRE_CHECKOUT': [
                     PreCheckoutQueryHandler(process_pre_checkout_query),

@@ -4,9 +4,9 @@ import datetime
 
 
 class Client(models.Model):
-    chat_id = models.CharField(max_length=100, verbose_name='ID чата клиента', null=True, blank=True, unique=True)
+    chat_id = models.CharField(max_length=100, verbose_name='ID чата клиента', null=True, blank=True)
     name = models.CharField(max_length=40, verbose_name='Имя клиента', null=True, blank=True)
-    phonenumber = models.CharField(max_length=12, verbose_name='Номер телефона', null=True, blank=True, unique=True)
+    phonenumber = models.CharField(max_length=12, verbose_name='Номер телефона', null=True, blank=True)
 
     class Meta:
         verbose_name = 'Клиент'
@@ -88,7 +88,7 @@ class Slot(models.Model):
         choices=START_TIME_CHOICES,
         max_length=5,
     )
-    specialist = models.ForeignKey(Specialist, on_delete=models.CASCADE)
+    specialist = models.ForeignKey(Specialist, on_delete=models.CASCADE, verbose_name='Cпециалист')
     salon = models.ForeignKey(Salon, on_delete=models.CASCADE)
 
     class Meta:
@@ -162,7 +162,6 @@ class Appointment(models.Model):
 
 
 class Payment(models.Model):
-    client = models.ForeignKey(Client, on_delete=models.CASCADE, verbose_name='Клиент', related_name='payments')
     amount = models.IntegerField(verbose_name='Сумма платежа', blank=True, null=True)
     date = models.DateTimeField(verbose_name='Дата платежа', auto_now_add=True)
     appointment = models.OneToOneField(
@@ -178,7 +177,7 @@ class Payment(models.Model):
         verbose_name_plural = 'Платежи'
 
     def __str__(self):
-        return f'{self.date}: {self.amount} - {self.client}'
+        return f"{self.date.strftime('%d.%m.%Y %H:%M')}: {self.amount} руб. - {self.appointment.client.name}"
 
 
 class Review(models.Model):
