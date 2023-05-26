@@ -533,14 +533,17 @@ class Command(BaseCommand):
             return 'GET_CLIENT_NAME'
 
         def get_client_name(update, context):
-            phone = update.message.text
+            phonenumber = update.message.text
             try:
-                phonenumber = phonenumbers.parse(phone, 'RU')
-                value = phonenumbers.is_valid_number(phonenumber)
+                phonenumber = phonenumbers.parse(phonenumber, 'RU')
             except phonenumbers.phonenumberutil.NumberParseException:
-                value = False
-            if value:
-                context.user_data['phone'] = phone
+                is_valid_phonenumber = False
+            else:
+                is_valid_phonenumber = phonenumbers.is_valid_number(phonenumber)
+
+            if is_valid_phonenumber:
+                pure_phonenumber = phonenumbers.format_number(phonenumber, phonenumbers.PhoneNumberFormat.E164)
+                context.user_data['phone'] = pure_phonenumber
                 keyboard = [
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -554,10 +557,19 @@ class Command(BaseCommand):
                 )
                 return 'CREATE_APPOINTMENT_RECORD'
             else:
+                keyboard = [
+                    [
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                context.bot.send_message(chat_id=update.effective_chat.id,
+                                         text='Введите корректный номер',
+                                         reply_markup=reply_markup,
+                                         )
 
+                return 'GET_CLIENT_NAME'
 
-                #query.answer()
-                return 'GET_CLIENT_PHONE'
 
         def create_appointment_record(update, context):
             logger.info(f'start to create appointment record - {context.user_data}')
