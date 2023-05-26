@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import phonenumbers
 import telegram
 from django.core.management.base import BaseCommand
 from django.db.models import Q
@@ -526,19 +527,30 @@ class Command(BaseCommand):
 
         def get_client_name(update, context):
             phone = update.message.text
-            context.user_data['phone'] = phone
-            keyboard = [
-                [
-                    InlineKeyboardButton("На главный", callback_data="to_start"),
-                ],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(
-                text='✅ Введите Ваше имя в ответном сообщении:',
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML,
-            )
-            return 'CREATE_APPOINTMENT_RECORD'
+            try:
+                phonenumber = phonenumbers.parse(phone, 'RU')
+                value = phonenumbers.is_valid_number(phonenumber)
+            except phonenumbers.phonenumberutil.NumberParseException:
+                value = False
+            if value:
+                context.user_data['phone'] = phone
+                keyboard = [
+                    [
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                update.message.reply_text(
+                    text='✅ Введите Ваше имя в ответном сообщении:',
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML,
+                )
+                return 'CREATE_APPOINTMENT_RECORD'
+            else:
+
+
+                #query.answer()
+                return 'GET_CLIENT_PHONE'
 
         def create_appointment_record(update, context):
             chat_id = update.message.chat_id
