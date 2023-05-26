@@ -374,8 +374,7 @@ class Command(BaseCommand):
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
-                service_id = context.user_data['service_id']
-                specialists = Specialist.objects.filter(services__id=service_id)
+                specialists = context.user_data['specialists']
                 slots = Slot.objects.filter(
                     Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
                     Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
@@ -392,7 +391,7 @@ class Command(BaseCommand):
                 times_keyboard = [times_keyboard[i:i + 5] for i in range(0, len(times_keyboard), 5)]
                 return_keyboard = [
                     [InlineKeyboardButton("На главный", callback_data="to_start")],
-                    [InlineKeyboardButton("Выбрать дату", callback_data=f'service_{service_id}')],
+                    # [InlineKeyboardButton("Выбрать дату", callback_data=f'service_{service_id}')],
                 ]
                 keyboard = times_keyboard + return_keyboard
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -410,38 +409,53 @@ class Command(BaseCommand):
             if query.data.startswith('time_'):
                 time = query.data.split('_')[-1]
                 context.user_data['time'] = time
-                logger.info(f'get specialist after time - {time}')
+                logger.info(f"get specialist after time - {context.user_data['type']}")
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
-                service_id = context.user_data['service_id']
-                specialists = Specialist.objects.filter(services__pk=service_id)
                 date = context.user_data['date']
-                slots = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
-                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
-                )
-                available_specialists = slots.filter(
-                    start_date=date,
-                    start_time=time,
-                ).values_list('specialist', flat=True).distinct()
-                keyboard = []
-                logger.info(f'specialists - {available_specialists}')
-                for specialist in available_specialists:
-                    logger.info(f'specialist - {specialist}')
-                    logger.info(f'specialists - {specialists}')
-                    specialist = specialists.get(pk=specialist)
-                    logger.info(specialist.name)
-                    keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}', callback_data=f'specialist_after_{specialist.id}')])
-                # keyboard.append([InlineKeyboardButton("Любой", callback_data="specialist_after_any")])
-                keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+                if context.user_data['type'] == 'by_service':
+                    service_id = context.user_data['service_id']
+                    specialists = Specialist.objects.filter(services__pk=service_id)
+                    slots = Slot.objects.filter(
+                        Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
+                        Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                    )
+                    available_specialists = slots.filter(
+                        start_date=date,
+                        start_time=time,
+                    ).values_list('specialist', flat=True).distinct()
+                    keyboard = []
+                    logger.info(f'specialists - {available_specialists}')
+                    for specialist in available_specialists:
+                        logger.info(f'specialist - {specialist}')
+                        logger.info(f'specialists - {specialists}')
+                        specialist = specialists.get(pk=specialist)
+                        logger.info(specialist.name)
+                        keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}', callback_data=f'specialist_after_{specialist.id}')])
+                    # keyboard.append([InlineKeyboardButton("Любой", callback_data="specialist_after_any")])
+                    keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    query.edit_message_text(
+                        text="Пожалуйста, выберите специалиста:",
+                        reply_markup=reply_markup,
+                    )
+                if context.user_data['type'] == 'by_specialist':
+                    services = context.user_data['services']
+                    keyboard = []
+                    logger.info(f'specialists - services - {services}')
+                    for service in services:
+                        keyboard.append([InlineKeyboardButton(f'{service.name} ({service.price} руб.)',
+                                                                callback_data=f'service_after_{service.id}')])
 
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                query.edit_message_text(
-                    text="Пожалуйста, выберите специалиста:",
-                    reply_markup=reply_markup,
-                )
+                    keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
+
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    query.edit_message_text(
+                        text="Пожалуйста, выберите услугу:",
+                        reply_markup=reply_markup,
+                    )
 
             query.answer()
 
@@ -457,13 +471,23 @@ class Command(BaseCommand):
                 context.user_data['specialist_id'] = specialist_id
                 specialist = Specialist.objects.get(pk=specialist_id)
                 context.user_data['specialist'] = specialist
-                service = context.user_data['service']
+                context.user_data['service'] = context.user_data['services'][0]
+            if query.data.startswith('service_after_'):
+                logger.info(f'get client phone - in service_after_')
+                service_id = query.data.split('_')[-1]
+                context.user_data['service_id'] = service_id
+                service = context.user_data['services'].get(pk=service_id)
+                context.user_data['service'] = service
+                context.user_data['specialist'] = context.user_data['specialists'][0]
+            if query.data.startswith('specialist_after_') or query.data.startswith('service_after_'):
                 date = context.user_data['date']
                 time = context.user_data['time']
+                service = context.user_data['service']
+                specialist = context.user_data['specialist']
                 slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time, specialist=specialist).first()
                 if slot:
                     context.user_data['slot_id'] = slot.id
-                    logger.info(f'get client phone - specialist_id - {specialist_id}')
+                    logger.info(f'get client phone - specialist_id - {specialist}')
                     text = f'Вы хотите записаться на услугу <b>{service.name}</b>' \
                        f' на <b>{date}</b> в <b>{time}</b> к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n'\
                        f'Продолжая, Вы даете свое согласие на обработку персональных данных.\n\n' \
@@ -568,6 +592,8 @@ class Command(BaseCommand):
             # Отправка подтверждения о готовности к выполнению платежа
             context.bot.answer_pre_checkout_query(query.id, ok=True)
 
+            return 'PROCESS_PRE_CHECKOUT'
+
 
         def success_payment(update, context):
 
@@ -662,11 +688,12 @@ class Command(BaseCommand):
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     CallbackQueryHandler(get_specialist_after_time, pattern='(time_.*)'),
                 ],
-                'GET_SPECIALIST_AFTER_TIME': [
+                'GET_SPECIALIST_OR_SERVICE_AFTER_TIME': [
                     CallbackQueryHandler(get_client_phone, pattern='(specialist_after_.*)'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
                 'GET_CLIENT_PHONE': [
+                    CallbackQueryHandler(get_client_phone, pattern='(service_after_.*)'),
                     CallbackQueryHandler(get_client_phone, pattern='(specialist_after_.*)'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ],
@@ -685,10 +712,10 @@ class Command(BaseCommand):
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     CallbackQueryHandler(get_date, pattern='(specialist_.*)'),
                 ],
-                # 'PROCESS_PRE_CHECKOUT': [
-                #     PreCheckoutQueryHandler(process_pre_checkout_query),
-                #     CallbackQueryHandler(success_payment, pattern='success_payment'),
-                # ]
+                'PROCESS_PRE_CHECKOUT': [
+                    PreCheckoutQueryHandler(process_pre_checkout_query),
+                    CallbackQueryHandler(success_payment, pattern='success_payment'),
+                ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
