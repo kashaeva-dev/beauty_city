@@ -271,7 +271,15 @@ class Command(BaseCommand):
 
             query = update.callback_query
             logger.info(f'get service query data {query.data}')
-            services = Service.objects.all()
+            now = datetime.datetime.now()
+            today = now.date()
+            current_time = now.time()
+
+            available_specialists = Slot.objects.filter(
+                Q(appointment__isnull=True, start_date__gt=today, ) |
+                Q(appointment__isnull=True, start_date=today, start_time__gte=current_time)
+            ).values_list('specialist', flat=True).distinct()
+            services = Service.objects.filter(specialist__in=available_specialists)
             keyboard = []
             for service in services:
                 mask = f"{service.name} ({service.price} руб.)"
@@ -614,7 +622,15 @@ class Command(BaseCommand):
             '''Выбор специалиста'''
             query = update.callback_query
             if query.data == 'get_specialist':
-                specialists = Specialist.objects.all()
+                now = datetime.datetime.now()
+                today = now.date()
+                current_time = now.time()
+
+                available_specialists = Slot.objects.filter(
+                    Q(appointment__isnull=True, start_date__gt=today, ) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time)
+                ).values_list('specialist', flat=True).distinct()
+                specialists = Specialist.objects.filter(pk__in=available_specialists)
                 keyboard = []
                 for specialist in specialists:
                     full_name = f'{specialist.name} {specialist.surname}'
