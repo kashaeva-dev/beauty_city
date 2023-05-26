@@ -401,10 +401,19 @@ class Command(BaseCommand):
                         callback_data=f'time_{time.strftime("%H:%M")}',
                     ))
                 times_keyboard = [times_keyboard[i:i + 5] for i in range(0, len(times_keyboard), 5)]
-                return_keyboard = [
-                    [InlineKeyboardButton("На главный", callback_data="to_start")],
-                    # [InlineKeyboardButton("Выбрать дату", callback_data=f'service_{service_id}')],
-                ]
+                return_keyboard = []
+                if context.user_data['type'] == 'by_service':
+                    return_keyboard = [
+                        [InlineKeyboardButton("На главный", callback_data="to_start")],
+                        [InlineKeyboardButton("Выбрать дату",
+                                              callback_data=f'service_{context.user_data["service_id"]}')],
+                    ]
+                elif context.user_data['type'] == 'by_specialist':
+                    return_keyboard = [
+                        [InlineKeyboardButton("На главный", callback_data="to_start")],
+                        [InlineKeyboardButton("Выбрать дату",
+                                              callback_data=f'specialist_{context.user_data["specialist_id"]}')],
+                    ]
                 keyboard = times_keyboard + return_keyboard
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 query.edit_message_text(
@@ -856,6 +865,7 @@ class Command(BaseCommand):
                 ],
                 'GET_TIME': [
                     CallbackQueryHandler(get_date, pattern='(service_.*)'),
+                    CallbackQueryHandler(get_date, pattern='(specialist_.*)'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     CallbackQueryHandler(get_specialist_after_time, pattern='(time_.*)'),
                 ],
