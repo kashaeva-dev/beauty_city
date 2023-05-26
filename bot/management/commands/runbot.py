@@ -74,13 +74,13 @@ class Command(BaseCommand):
                 ],
             ]
             keyboard_old = [
-                    [
-                        InlineKeyboardButton("О нас", callback_data='to_FAQ'),
-                        InlineKeyboardButton("Отставить отзыв", callback_data="to_review")
-                    ],
-                    [
-                        InlineKeyboardButton("Записаться", callback_data="to_order")
-                    ],
+                [
+                    InlineKeyboardButton("О нас", callback_data='to_FAQ'),
+                    InlineKeyboardButton("Отставить отзыв", callback_data="to_review")
+                ],
+                [
+                    InlineKeyboardButton("Записаться", callback_data="to_order")
+                ],
             ]
 
             if no_review_appointments.exists():
@@ -110,7 +110,6 @@ class Command(BaseCommand):
                     )
 
             return 'MAIN_MENU'
-
 
         def faq(update, _):
             query = update.callback_query
@@ -144,7 +143,6 @@ class Command(BaseCommand):
                     parse_mode=telegram.ParseMode.MARKDOWN,
                 )
             return 'ABOUT'
-
 
         def review(update, context):
             query = update.callback_query
@@ -182,7 +180,7 @@ class Command(BaseCommand):
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
                     ],
-                    ]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 query.edit_message_text(
                     text="Пожалуйста, оцените Ваше посещение:",
@@ -233,7 +231,6 @@ class Command(BaseCommand):
             )
 
             return 'MAIN_MENU'
-
 
         def make_appointment(update, _):
             '''Функция создает ордер на услугу'''
@@ -293,7 +290,6 @@ class Command(BaseCommand):
 
             return 'SERVICES'
 
-
         def get_date(update, context):
             query = update.callback_query
             if query.data.startswith('service_'):
@@ -318,8 +314,9 @@ class Command(BaseCommand):
                 today = now.date()
                 current_time = now.time()
                 slots = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
-                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
+                      specialist__in=specialists)
                 )
                 available_dates = slots.values_list('start_date', flat=True).distinct().order_by('start_date')
                 logger.info(f'слоты {slots}')
@@ -376,8 +373,9 @@ class Command(BaseCommand):
                 current_time = now.time()
                 specialists = context.user_data['specialists']
                 slots = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
-                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
+                      specialist__in=specialists)
                 )
                 times = slots.filter(
                     start_date=date,
@@ -418,8 +416,9 @@ class Command(BaseCommand):
                     service_id = context.user_data['service_id']
                     specialists = Specialist.objects.filter(services__pk=service_id)
                     slots = Slot.objects.filter(
-                        Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists,) |
-                        Q(appointment__isnull=True, start_date=today, start_time__gte=current_time, specialist__in=specialists)
+                        Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                        Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
+                          specialist__in=specialists)
                     )
                     available_specialists = slots.filter(
                         start_date=date,
@@ -432,7 +431,8 @@ class Command(BaseCommand):
                         logger.info(f'specialists - {specialists}')
                         specialist = specialists.get(pk=specialist)
                         logger.info(specialist.name)
-                        keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}', callback_data=f'specialist_after_{specialist.id}')])
+                        keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}',
+                                                              callback_data=f'specialist_after_{specialist.id}')])
                     # keyboard.append([InlineKeyboardButton("Любой", callback_data="specialist_after_any")])
                     keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
@@ -447,7 +447,7 @@ class Command(BaseCommand):
                     logger.info(f'specialists - services - {services}')
                     for service in services:
                         keyboard.append([InlineKeyboardButton(f'{service.name} ({service.price} руб.)',
-                                                                callback_data=f'service_after_{service.id}')])
+                                                              callback_data=f'service_after_{service.id}')])
 
                     keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
@@ -460,7 +460,6 @@ class Command(BaseCommand):
             query.answer()
 
             return 'GET_CLIENT_PHONE'
-
 
         def get_client_phone(update, context):
             query = update.callback_query
@@ -484,14 +483,15 @@ class Command(BaseCommand):
                 time = context.user_data['time']
                 service = context.user_data['service']
                 specialist = context.user_data['specialist']
-                slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time, specialist=specialist).first()
+                slot = Slot.objects.filter(appointment__isnull=True, start_date=date, start_time=time,
+                                           specialist=specialist).first()
                 if slot:
                     context.user_data['slot_id'] = slot.id
                     logger.info(f'get client phone - specialist_id - {specialist}')
                     text = f'Вы хотите записаться на услугу <b>{service.name}</b>' \
-                       f' на <b>{date}</b> в <b>{time}</b> к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n'\
-                       f'Продолжая, Вы даете свое согласие на обработку персональных данных.\n\n' \
-                    f'Пожалуйста, введите Ваш номер телефона <b>в ответном сообщении</b>.'
+                           f' на <b>{date}</b> в <b>{time}</b> к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
+                           f'Продолжая, Вы даете свое согласие на обработку персональных данных.\n\n' \
+                           f'Пожалуйста, введите Ваш номер телефона <b>в ответном сообщении</b>.'
                     keyboard = [
                         [
                             InlineKeyboardButton("Позвонить", callback_data="show_phone"),
@@ -507,14 +507,14 @@ class Command(BaseCommand):
                 else:
                     query.edit_message_text(
                         text="Извините, время уже занято. Пожалуйста, выберите другое время",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Выбрать время", callback_data=f'date_{date}')]])
+                        reply_markup=InlineKeyboardMarkup(
+                            [[InlineKeyboardButton("Выбрать время", callback_data=f'date_{date}')]])
                     )
                     return 'GET_TIME'
 
             query.answer()
 
             return 'GET_CLIENT_NAME'
-
 
         def get_client_name(update, context):
             phone = update.message.text
@@ -532,7 +532,6 @@ class Command(BaseCommand):
             )
             return 'CREATE_APPOINTMENT_RECORD'
 
-
         def create_appointment_record(update, context):
             chat_id = update.message.chat_id
             name = update.message.chat.first_name
@@ -543,10 +542,10 @@ class Command(BaseCommand):
             logger.info(f'get client name - {name}')
             text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date}</b> в <b>{time}</b> ' \
                    f'к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
-                   f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n'\
-            f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
-                   f'Вы можете оплатить сейчас или наличными в салоне.\n\n'\
-            f'Спасибо за запись!'
+                   f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n' \
+                   f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
+                   f'Вы можете оплатить сейчас или наличными в салоне.\n\n' \
+                   f'Спасибо за запись!'
 
             keyboard = [
                 [
@@ -563,7 +562,6 @@ class Command(BaseCommand):
             )
 
             return 'CREATE_APPOINTMENT_RECORD'
-
 
         def buy(update, context):
             query = update.callback_query
@@ -585,20 +583,29 @@ class Command(BaseCommand):
                 )
             query.answer()
 
-            return 'PROCESS_PRE_CHECKOUT'
+            return ConversationHandler.END
 
         def process_pre_checkout_query(update, context):
             query = update.pre_checkout_query
             # Отправка подтверждения о готовности к выполнению платежа
             context.bot.answer_pre_checkout_query(query.id, ok=True)
 
-            return 'PROCESS_PRE_CHECKOUT'
-
 
         def success_payment(update, context):
+            text = f'✅ Спасибо за оплату!{update.message.successful_payment.invoice_payload} {context.user_data["service"].price}'
+            keyboard = [
+                [
+                    InlineKeyboardButton("На главный", callback_data="to_start"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.HTML,
+            )
 
-            update.message.reply_text(f'Спасибо за оплату!{update.message.successful_payment.invoice_payload} {context.user_data["service"].price}')
-            return ConversationHandler.END
+            return 'SUCCESS_PAYMENT'
 
         def apply_promocode(update, context):
             pass
@@ -612,8 +619,8 @@ class Command(BaseCommand):
                 for specialist in specialists:
                     full_name = f'{specialist.name} {specialist.surname}'
                     keyboard.append([InlineKeyboardButton(full_name,
-                                    callback_data=f'specialist_{specialist.pk}')])
-            
+                                                          callback_data=f'specialist_{specialist.pk}')])
+
                 keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -626,7 +633,6 @@ class Command(BaseCommand):
             )
 
             return 'SPECIALISTS'
-
 
         def cancel(update, _):
             user = update.message.from_user
@@ -642,7 +648,9 @@ class Command(BaseCommand):
         dispatcher.add_handler(pre_checkout_handler)
         dispatcher.add_handler(success_payment_handler)
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start_conversation)],
+            entry_points=[CommandHandler('start', start_conversation),
+                          CallbackQueryHandler(start_conversation, pattern='to_start'),
+                          ],
             states={
                 'MAIN_MENU': [
                     CallbackQueryHandler(faq, pattern='to_FAQ'),
@@ -715,6 +723,9 @@ class Command(BaseCommand):
                 'PROCESS_PRE_CHECKOUT': [
                     PreCheckoutQueryHandler(process_pre_checkout_query),
                     CallbackQueryHandler(success_payment, pattern='success_payment'),
+                ],
+                'SUCCESS_PAYMENT': [
+                    CallbackQueryHandler(start_conversation, pattern='to_start'),
                 ]
             },
             fallbacks=[CommandHandler('cancel', cancel)],
