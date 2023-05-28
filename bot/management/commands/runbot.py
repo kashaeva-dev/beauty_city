@@ -286,7 +286,8 @@ class Command(BaseCommand):
                 Q(appointment__isnull=True, start_date__gt=today) |
                 Q(appointment__isnull=True, start_date=today, start_time__gte=current_time),
             ).values_list('specialist', flat=True).distinct()
-            services = Service.objects.filter(specialist__in=available_specialists)
+            logger.debug('available specialists %s', available_specialists)
+            services = Service.objects.filter(specialists__in=available_specialists)
             keyboard = []
             for service in services:
                 mask = f"{service.name} ({service.price} руб.)"
