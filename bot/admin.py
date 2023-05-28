@@ -12,13 +12,49 @@ from .models import (
     Review,
     Promocode,
 )
+from django.utils.translation import gettext_lazy as _
+import logging
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s', level=logging.INFO,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class ByServiceFilter(admin.SimpleListFilter):
+    title = _('Услуга')
+    parameter_name = 'specialist'
+
+    def lookups(self, request, model_admin):
+        services = Service.objects.all()
+        logger.info('список услуг %s', services)
+        filters = []
+        for service in services:
+            all_ids = []
+            all_ids.append(service.pk)
+            filters.append((service.pk, service.name))
+
+        return filters if filters else None
+
+    def queryset(self, request, queryset):
+        if self.value() is not None:
+            return queryset.filter(specialist__in=Specialist.objects.filter(services__in=Service.objects.filter(pk=self.value())))
+        else:
+            return queryset
 
 admin.site.register(Client)
-admin.site.register(Service)
 admin.site.register(Salon)
 admin.site.register(Specialist)
 admin.site.register(Review)
 admin.site.register(Promocode)
+
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_filter = (
+        'specialists',
+    )
 
 
 @admin.register(Appointment)
@@ -42,11 +78,13 @@ class SlotAdmin(admin.ModelAdmin):
         'start_time',
         'specialist',
     )
-    list_filter = (
-        'specialist',
-        'start_date',
-    )
     ordering = (
+        'start_date',
+        'start_time',
+    )
+    list_filter = (
+        ByServiceFilter,
+        'specialist',
         'start_date',
         'start_time',
     )
@@ -59,4 +97,3 @@ class SlotAdmin(admin.ModelAdmin):
         except IntegrityError:
             error_message = "Данное время уже существует"
             self.message_user(request, error_message)
-

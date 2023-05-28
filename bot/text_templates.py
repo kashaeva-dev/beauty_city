@@ -11,6 +11,7 @@ def get_services():
     table.align = 'l'
     return table
 
+
 table = get_services()
 
 

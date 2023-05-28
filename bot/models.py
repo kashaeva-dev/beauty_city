@@ -29,7 +29,7 @@ class Salon(models.Model):
 
 
 class Service(models.Model):
-    name = models.CharField(verbose_name='Название услуги',max_length=30)
+    name = models.CharField(verbose_name='Название услуги', max_length=30)
     price = models.IntegerField(verbose_name='Цена услуги', blank=True, null=True)
 
     class Meta:
@@ -41,10 +41,10 @@ class Service(models.Model):
 
 
 class Specialist(models.Model):
-    name = models.CharField(max_length=40, verbose_name='Имя мастера',)
+    name = models.CharField(max_length=40, verbose_name='Имя мастера')
     surname = models.CharField(max_length=40, verbose_name='Фамилия мастера')
     salons = models.ManyToManyField(Salon)
-    services = models.ManyToManyField(Service)
+    services = models.ManyToManyField(Service, related_name='specialists')
 
     class Meta:
         verbose_name = 'Мастер'
@@ -94,8 +94,13 @@ class Slot(models.Model):
     class Meta:
         verbose_name = 'Слот'
         verbose_name_plural = 'Слоты'
-        constraints = [models.UniqueConstraint(fields=['start_date', 'start_time', 'specialist'], name='unique_slot',
-                                               violation_error_message="Данное время уже существует")
+        constraints = [models.UniqueConstraint(fields=[
+            'start_date',
+            'start_time',
+            'specialist'],
+            name='unique_slot',
+            violation_error_message="Данное время уже существует",
+        )
                        ]
 
     def __str__(self):
@@ -158,7 +163,9 @@ class Appointment(models.Model):
         verbose_name_plural = 'Записи'
 
     def __str__(self):
-        return f'{self.client.name} к мастеру {self.slot.specialist.name} {self.slot.specialist.surname} ({self.service.name}, {self.slot.start_date} {self.slot.start_time}'
+        return f'{self.client.name} к мастеру' \
+               f' {self.slot.specialist.name} {self.slot.specialist.surname} ({self.service.name},' \
+               f' {self.slot.start_date} {self.slot.start_time}'
 
 
 class Payment(models.Model):

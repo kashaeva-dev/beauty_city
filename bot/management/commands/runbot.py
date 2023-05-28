@@ -3,10 +3,8 @@ import logging
 
 import phonenumbers
 import telegram
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand
 from django.db.models import Q
-from pytz import timezone
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -24,20 +22,18 @@ from telegram.ext import (
     PreCheckoutQueryHandler,
 )
 
-from conf import settings
-
 from bot.models import (
     Client,
     Slot,
     Appointment,
     Review,
-    Salon,
     Specialist,
     Service, Payment, Promocode,
 )
 from bot.text_templates import (
     FAQ_ANSWERS,
 )
+from conf import settings
 
 # Ведение журнала логов
 logging.basicConfig(
@@ -63,8 +59,8 @@ class Command(BaseCommand):
                 client__in=clients,
                 reviews__isnull=True,
             )
-            logger.info(f'client with effective chat_id {clients}')
-            logger.info(f'no_review_appointments {no_review_appointments}')
+            logger.debug('client with effective chat_id %s', clients)
+            logger.debug('no_review_appointments %s', no_review_appointments)
             if query:
                 query.answer()
 
@@ -77,15 +73,15 @@ class Command(BaseCommand):
             keyboard_old = [
                 [
                     InlineKeyboardButton("О нас", callback_data='to_FAQ'),
-                    InlineKeyboardButton("Отставить отзыв", callback_data="to_review")
+                    InlineKeyboardButton("Отставить отзыв", callback_data="to_review"),
                 ],
                 [
-                    InlineKeyboardButton("Записаться", callback_data="to_order")
+                    InlineKeyboardButton("Записаться", callback_data="to_order"),
                 ],
             ]
 
             if no_review_appointments.exists():
-                logger.info(f'There are appointments without reviews: {no_review_appointments}')
+                logger.debug('There are appointments without reviews: %s', no_review_appointments)
                 context.user_data['no_review_appointments'] = no_review_appointments
                 if query:
                     query.edit_message_text(
@@ -98,7 +94,6 @@ class Command(BaseCommand):
                         reply_markup=InlineKeyboardMarkup(keyboard_old),
                     )
             else:
-                logger.info('client is None')
                 if query:
                     query.edit_message_text(
                         text="Выберите интересующий Вас вопрос:",
@@ -151,14 +146,14 @@ class Command(BaseCommand):
             if query.data == 'to_review':
                 keyboard = []
                 for appointment in no_review_appointments:
-                    logger.info(f'appointment {appointment}')
+                    logger.debug('appointment %s', appointment)
                     mask = f"{appointment.service.name} {appointment.slot.start_date.strftime('%d.%m')}" \
                            f" в {appointment.slot.start_time.strftime('%H.%M')}," \
                            f" мастер: {appointment.slot.specialist.name}"
                     keyboard.append([InlineKeyboardButton(mask, callback_data=f'review_{appointment.id}')])
                 keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                text = f'Пожалуйста, выберите посещение, для которого хотите оставить отзыв:'
+                text = 'Пожалуйста, выберите посещение, для которого хотите оставить отзыв:'
                 query.edit_message_text(
                     text=text,
                     reply_markup=reply_markup,
@@ -170,7 +165,7 @@ class Command(BaseCommand):
             query = update.callback_query
             if query.data.startswith('review_'):
                 appointment_id = query.data.split('_')[-1]
-                logger.info(f'pk записи {appointment_id}')
+                logger.debug('pk записи %s', appointment_id)
                 context.user_data['appointment_id'] = appointment_id
                 keyboard = [
                     [
@@ -215,7 +210,7 @@ class Command(BaseCommand):
             review_text = update.message.text
             appointment_id = context.user_data['appointment_id']
             mark = context.user_data['mark']
-            logger.info(f'записть - {appointment_id}, оценка - {mark}')
+            logger.debug('запись - %s, оценка - %s', (appointment_id, mark))
             appointment = Appointment.objects.get(pk=appointment_id)
             Review.objects.get_or_create(appointment=appointment, defaults={
                 'mark': int(mark),
@@ -238,7 +233,12 @@ class Command(BaseCommand):
             return 'MAIN_MENU'
 
         def make_appointment(update, _):
-            '''Функция создает ордер на услугу'''
+
+            """
+            Функция выводит меню начала записи. Возможны 2 варианта:
+            вначале выбрать услугу или вначале выбрать специалиста.
+            """
+
             query = update.callback_query
             keyboard = [
                 [
@@ -272,17 +272,19 @@ class Command(BaseCommand):
 
         def get_service(update, _):
 
-            '''Функция отвечает за вывод списка услуг для выбора пользователя>'''
+            """
+            Функция отвечает за вывод списка услуг для выбора пользователем
+            """
 
             query = update.callback_query
-            logger.info(f'get service query data {query.data}')
+            logger.debug('get service query data %s', query.data)
             now = datetime.datetime.now()
             today = now.date()
             current_time = now.time()
 
             available_specialists = Slot.objects.filter(
-                Q(appointment__isnull=True, start_date__gt=today, ) |
-                Q(appointment__isnull=True, start_date=today, start_time__gte=current_time)
+                Q(appointment__isnull=True, start_date__gt=today) |
+                Q(appointment__isnull=True, start_date=today, start_time__gte=current_time),
             ).values_list('specialist', flat=True).distinct()
             services = Service.objects.filter(specialist__in=available_specialists)
             keyboard = []
@@ -317,7 +319,7 @@ class Command(BaseCommand):
                 context.user_data['type'] = 'by_specialist'
                 specialist_id = query.data.split('_')[-1]
                 specialists = [Specialist.objects.get(pk=specialist_id)]
-                logger.info(f'специалист {specialist_id}')
+                logger.debug('специалист %s', specialist_id)
                 context.user_data['specialist_id'] = specialist_id
                 context.user_data['specialists'] = specialists
                 services = specialists[0].services.all()
@@ -327,12 +329,18 @@ class Command(BaseCommand):
                 today = now.date()
                 current_time = now.time()
                 slots = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists) |
                     Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
-                      specialist__in=specialists)
+                      specialist__in=specialists),
                 )
                 available_dates = slots.values_list('start_date', flat=True).distinct().order_by('start_date')
-                logger.info(f'слоты {slots}')
+                logger.debug('слоты %s', slots)
+                """
+                Ниже готовим список дат для вывода пользователю. Вначале нам нужно создать список дат
+                с понедельника по пятницу, который будет включать в себя все даты, на которые есть слоты.
+                Далее для каждой даты из этого списка, есть ли слоты на эту дату. Если есть, то добавляем
+                кнопку с датой (число на кнопке) в список кнопок для вывода пользователю. Если нет, то не добавляем.
+                """
                 min_date = available_dates.first()
                 max_date = available_dates.last()
                 min_date_weekday = min_date.weekday()
@@ -362,7 +370,7 @@ class Command(BaseCommand):
                                 InlineKeyboardButton(" Пт. ", callback_data='null'),
                                 InlineKeyboardButton(" Сб. ", callback_data='null'),
                                 InlineKeyboardButton(" Вс. ", callback_data='null'),
-                                ]
+                                ],
                            ] + dates_keyboard
                 keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -381,15 +389,15 @@ class Command(BaseCommand):
                 date = query.data.split('_')[-1]
                 date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
                 context.user_data['date'] = date
-                logger.info(f'get time - date - {date}')
+                logger.debug('get time - date - %s', date)
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
                 specialists = context.user_data['specialists']
                 slots = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                    Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists) |
                     Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
-                      specialist__in=specialists)
+                      specialist__in=specialists),
                 )
                 times = slots.filter(
                     start_date=date,
@@ -430,7 +438,7 @@ class Command(BaseCommand):
             if query.data.startswith('time_'):
                 time = query.data.split('_')[-1]
                 context.user_data['time'] = time
-                logger.info(f"get specialist after time - {context.user_data['type']}")
+                logger.debug('get specialist after time - %s', context.user_data['type'])
                 now = datetime.datetime.now()
                 today = now.date()
                 current_time = now.time()
@@ -439,24 +447,23 @@ class Command(BaseCommand):
                     service_id = context.user_data['service_id']
                     specialists = Specialist.objects.filter(services__pk=service_id)
                     slots = Slot.objects.filter(
-                        Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists, ) |
+                        Q(appointment__isnull=True, start_date__gt=today, specialist__in=specialists) |
                         Q(appointment__isnull=True, start_date=today, start_time__gte=current_time,
-                          specialist__in=specialists)
+                          specialist__in=specialists),
                     )
                     available_specialists = slots.filter(
                         start_date=date,
                         start_time=time,
                     ).values_list('specialist', flat=True).distinct()
                     keyboard = []
-                    logger.info(f'specialists - {available_specialists}')
+                    logger.debug('specialists - %s', available_specialists)
                     for specialist in available_specialists:
-                        logger.info(f'specialist - {specialist}')
-                        logger.info(f'specialists - {specialists}')
+                        logger.debug('specialist - %s', specialist)
+                        logger.debug('specialists - %s', specialists)
                         specialist = specialists.get(pk=specialist)
-                        logger.info(specialist.name)
+                        logger.debug(specialist.name)
                         keyboard.append([InlineKeyboardButton(f'{specialist.name} {specialist.surname}',
                                                               callback_data=f'specialist_after_{specialist.id}')])
-                    # keyboard.append([InlineKeyboardButton("Любой", callback_data="specialist_after_any")])
                     keyboard.append([InlineKeyboardButton("На главный", callback_data="to_start")])
 
                     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -467,7 +474,7 @@ class Command(BaseCommand):
                 if context.user_data['type'] == 'by_specialist':
                     services = context.user_data['services']
                     keyboard = []
-                    logger.info(f'specialists - services - {services}')
+                    logger.debug('specialists - services - %s', services)
                     for service in services:
                         keyboard.append([InlineKeyboardButton(f'{service.name} ({service.price} руб.)',
                                                               callback_data=f'service_after_{service.id}')])
@@ -487,7 +494,7 @@ class Command(BaseCommand):
         def get_client_phone(update, context):
             query = update.callback_query
 
-            logger.info(f'get client phone - query - {update}')
+            logger.debug('get client phone - query - %s', update)
             if query.data.startswith('specialist_after_'):
                 specialist_id = query.data.split('_')[-1]
                 context.user_data['specialist_id'] = specialist_id
@@ -495,7 +502,7 @@ class Command(BaseCommand):
                 context.user_data['specialist'] = specialist
                 context.user_data['service'] = context.user_data['services'][0]
             if query.data.startswith('service_after_'):
-                logger.info(f'get client phone - in service_after_')
+                logger.debug('get client phone - in service_after_')
                 service_id = query.data.split('_')[-1]
                 context.user_data['service_id'] = service_id
                 service = context.user_data['services'].get(pk=service_id)
@@ -511,9 +518,10 @@ class Command(BaseCommand):
                 if slot:
                     context.user_data['slot'] = slot
                     context.user_data['slot_id'] = slot.id
-                    logger.info(f'get client phone - specialist_id - {specialist}')
+                    logger.debug('get client phone - specialist_id - %s', specialist)
                     text = f'Вы хотите записаться на услугу *{service.name}*' \
-                           f' на *{date.strftime("%d.%m.%Y")}* в *{time}* к мастеру *{specialist.name} {specialist.surname}.*\n\n' \
+                           f' на *{date.strftime("%d.%m.%Y")}* в *{time}* ' \
+                           f'к мастеру *{specialist.name} {specialist.surname}.*\n\n' \
                            f'Продолжая, Вы даете свое [согласие на обработку персональных данных]' \
                            f'(https://docs.google.com/document/' \
                            f'd/1U-ZZa9bosHbqEbVwvgubUdR6T9gC33igDmEUMYVREQw/edit?usp=sharing).\n\n' \
@@ -521,7 +529,7 @@ class Command(BaseCommand):
                     keyboard = [
                         [
                             InlineKeyboardButton("Позвонить", callback_data="show_phone"),
-                            InlineKeyboardButton("На главный", callback_data="to_start")
+                            InlineKeyboardButton("На главный", callback_data="to_start"),
                         ],
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -535,7 +543,7 @@ class Command(BaseCommand):
                     query.edit_message_text(
                         text="Извините, время уже занято. Пожалуйста, выберите другое время",
                         reply_markup=InlineKeyboardMarkup(
-                            [[InlineKeyboardButton("Выбрать время", callback_data=f'date_{date}')]])
+                            [[InlineKeyboardButton("Выбрать время", callback_data=f'date_{date}')]]),
                     )
                     return 'GET_TIME'
 
@@ -568,7 +576,6 @@ class Command(BaseCommand):
                 )
                 return 'CREATE_APPOINTMENT_RECORD'
             else:
-                logger.info({update.message.contact})
                 keyboard = [
                     [
                         InlineKeyboardButton("На главный", callback_data="to_start"),
@@ -582,9 +589,8 @@ class Command(BaseCommand):
 
                 return 'GET_CLIENT_NAME'
 
-
         def create_appointment_record(update, context):
-            logger.info(f'start to create appointment record - {context.user_data}')
+            logger.debug('start to create appointment record %s', context.user_data)
             chat_id = update.message.chat_id
             name = update.message.text
             service = context.user_data['service']
@@ -599,7 +605,7 @@ class Command(BaseCommand):
                     name=name,
                     phonenumber=context.user_data['phone'],
                 )
-                logger.info(f'trying to create appointment - client - {client} {created}')
+                logger.debug('trying to create appointment - client - %s %s', (client, created))
                 context.user_data['client'] = client
                 appointment = Appointment.objects.create(
                     client=client,
@@ -608,15 +614,16 @@ class Command(BaseCommand):
                 )
                 context.user_data['appointment'] = appointment
             except:
-                logger.info(f'error while creating appointment record', exc_info=True)
+                logger.debug('error while creating appointment record', exc_info=True)
                 update.message.reply_text(
                     text='Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.',
                     parse_mode=ParseMode.HTML,
                 )
                 return ConversationHandler.END
 
-            logger.info(f'get client name - {name}')
-            text = f'Вы записаны на услугу <b>{service.name}</b> на <b>{date.strftime("%d.%m.%Y")}</b> в <b>{time}</b> ' \
+            logger.debug('get client name - %s', name)
+            text = f'Вы записаны на услугу <b>{service.name}</b>' \
+                   f' на <b>{date.strftime("%d.%m.%Y")}</b> в <b>{time}</b> ' \
                    f'к мастеру <b>{specialist.name} {specialist.surname}.</b>\n\n' \
                    f'Наш салон находится по адресу: <b>{FAQ_ANSWERS["FAQ_address"]}</b>.\n\n' \
                    f'Стоимость услуги составляет <b>{service.price} руб</b>. ' \
@@ -649,7 +656,7 @@ class Command(BaseCommand):
                 time = context.user_data['time']
                 price = 0
                 if discount_price:
-                    logger.info(f'buy - discount price - {discount_price}')
+                    logger.debug('buy - discount price - %s', discount_price)
                     price = int(discount_price)
                 else:
                     price = int(service.price)
@@ -680,21 +687,21 @@ class Command(BaseCommand):
                     error_message="Что-то пошло не так...",
                 )
                 return
-            # Отправка подтверждения о готовности к выполнению платежа
-            context.bot.answer_pre_checkout_query(query.id, ok=True)
-
+            else:
+                context.bot.answer_pre_checkout_query(query.id, ok=True)
 
         def success_payment(update, context):
             '''Обработка успешной оплаты'''
             try:
                 Payment.objects.create(
-                    client = context.user_data['client'],
+                    client=context.user_data['client'],
                     appointment=context.user_data['appointment'],
                     amount=update.message.successful_payment.total_amount / 100,
                 )
             except:
-                logger.error(f'Ошибка при записи информации о платеже в бд'
-                             f' {update.message.successful_payment.invoice_payload}')
+                logger.error('Ошибка при записи информации о платеже в базу данных %s',
+                             update.message.successful_payment.invoice_payload,
+                             )
             finally:
                 text = f'✅ Спасибо за оплату {update.message.successful_payment.total_amount / 100} руб.!\n\n'
                 keyboard = [
@@ -711,8 +718,7 @@ class Command(BaseCommand):
 
             return 'SUCCESS_PAYMENT'
 
-
-        def get_promocode(update, context):
+        def get_promocode(update, _):
             query = update.callback_query
             if query.data == 'get_promocode':
                 keyboard = [
@@ -727,7 +733,6 @@ class Command(BaseCommand):
                     parse_mode=ParseMode.HTML,
                 )
                 return 'CHECK_PROMOCODE'
-
 
         def check_promocode(update, context):
             promocode = update.message.text
@@ -751,7 +756,7 @@ class Command(BaseCommand):
             else:
                 service = context.user_data['service']
                 discount_price = service.price - (service.price * promocode.discount / 100)
-                logger.info(f'check_promocode - discount price - {discount_price}')
+                logger.debug('check_promocode - discount price - %s', discount_price)
                 context.user_data['discount_price'] = discount_price
                 text = f'✅ Ваш промокод <b>{promocode.name}</b> применен!\n\n' \
                        f'Стоимость услуги с учетом <b>{promocode.discount}%</b>' \
@@ -760,11 +765,11 @@ class Command(BaseCommand):
                 appointment.promocode = promocode
                 appointment.save()
                 keyboard = [
-                        [
-                            InlineKeyboardButton("Оплатить", callback_data="to_buy"),
-                            InlineKeyboardButton("На главный", callback_data="to_start"),
-                        ],
-                    ]
+                    [
+                        InlineKeyboardButton("Оплатить", callback_data="to_buy"),
+                        InlineKeyboardButton("На главный", callback_data="to_start"),
+                    ],
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 update.message.reply_text(
                     text=text,
@@ -772,7 +777,6 @@ class Command(BaseCommand):
                     parse_mode=ParseMode.HTML,
                 )
                 return 'APPLY_PROMOCODE'
-
 
         def get_specialist(update, _):
             '''Выбор специалиста'''
@@ -783,8 +787,8 @@ class Command(BaseCommand):
                 current_time = now.time()
 
                 available_specialists = Slot.objects.filter(
-                    Q(appointment__isnull=True, start_date__gt=today, ) |
-                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time)
+                    Q(appointment__isnull=True, start_date__gt=today) |
+                    Q(appointment__isnull=True, start_date=today, start_time__gte=current_time),
                 ).values_list('specialist', flat=True).distinct()
                 specialists = Specialist.objects.filter(pk__in=available_specialists)
                 keyboard = []
@@ -799,7 +803,7 @@ class Command(BaseCommand):
             query.answer()
 
             query.edit_message_text(
-                text=f'Пожалуйста, выберите нужного Вам специалиста:',
+                text='Пожалуйста, выберите нужного Вам специалиста:',
                 reply_markup=reply_markup,
                 parse_mode=telegram.ParseMode.MARKDOWN,
             )
@@ -808,7 +812,7 @@ class Command(BaseCommand):
 
         def cancel(update, _):
             user = update.message.from_user
-            logger.info("Пользователь %s отменил разговор.", user.first_name)
+            logger.debug("Пользователь %s отменил разговор.", user.first_name)
             update.message.reply_text(
                 'До новых встреч',
                 reply_markup=ReplyKeyboardRemove(),
@@ -887,8 +891,6 @@ class Command(BaseCommand):
                     CallbackQueryHandler(get_promocode, pattern='get_promocode'),
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
                     MessageHandler(Filters.text, create_appointment_record),
-                    # PreCheckoutQueryHandler(process_pre_checkout_query),
-                    # CallbackQueryHandler(success_payment, pattern='success_payment'),
                 ],
                 'SPECIALISTS': [
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
@@ -910,7 +912,7 @@ class Command(BaseCommand):
                 ],
                 'SUCCESS_PAYMENT': [
                     CallbackQueryHandler(start_conversation, pattern='to_start'),
-                ]
+                ],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
