@@ -37,7 +37,7 @@ from conf import settings
 
 # Ведение журнала логов
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s', level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s', level=logging.WARNING,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,7 +287,7 @@ class Command(BaseCommand):
                 Q(appointment__isnull=True, start_date=today, start_time__gte=current_time),
             ).values_list('specialist', flat=True).distinct()
             logger.debug('available specialists %s', available_specialists)
-            services = Service.objects.filter(specialists__in=available_specialists)
+            services = Service.objects.filter(specialists__in=available_specialists).distinct()
             keyboard = []
             for service in services:
                 mask = f"{service.name} ({service.price} руб.)"
